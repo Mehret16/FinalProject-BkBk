@@ -1,5 +1,16 @@
 import express from 'express';
-import { registerUser, loginUser, verifyEmail } from '../services/authService.js';
+import passport from 'passport';
+import { 
+  registerUser, 
+  loginUser, 
+  verifyEmail 
+} from '../services/authService.js';
+import { 
+  googleAuth, 
+  googleAuthCallback, 
+  getCurrentUser, 
+  logout 
+} from '../controllers/authController.js';
 import { validateEmail, validatePassword, validateInput } from '../middleware/validation.js';
 import { verifyToken } from '../middleware/auth.js';
 import { logger } from '../config/logger.js';
@@ -126,5 +137,19 @@ router.get('/me', verifyToken, async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+// Google OAuth Routes
+router.get('/google', googleAuth);
+
+router.get(
+  '/google/callback', 
+  googleAuthCallback
+);
+
+// Get current user
+router.get('/me', verifyToken, getCurrentUser);
+
+// Logout
+router.post('/logout', verifyToken, logout);
 
 export default router;
