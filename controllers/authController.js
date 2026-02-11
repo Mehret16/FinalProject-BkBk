@@ -1,64 +1,86 @@
-import jwt from 'jsonwebtoken';
-import passport from 'passport';
-import User from '../models/User.js';
-import logger from '../config/logger.js';
+import { createClient } from '@supabase/supabase-js';
+import 'dotenv/config';
 
-// Generate JWT Token
-const generateToken = (user) => {
-  return jwt.sign(
-    { id: user._id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRY }
-  );
+const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+const handleSignup = async (req, res, assignedRole) => {
+    try {
+        const { email, password, firstName, lastName, age, gender, country, adminKey } = req.body;
+        const supabase = getSupabase();
+
+        // 1. SECURITY CHECK FOR DOCTORS
+        if (assignedRole === 'doctor') {
+            const DOCTOR_SECRET = process.env.DOCTOR_SIGNUP_SECRET || 'MY_SUPER_SECRET_123'; 
+            if (adminKey !== DOCTOR_SECRET) {
+                return res.status(403).json({ error: "Unauthorized: Invalid Doctor Secret Key." });
+            }
+        }
+
+        // 2. CREATE AUTH USER
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: { first_name: firstName, last_name: lastName, role: assignedRole }
+            }
+        });
+
+        if (error) return res.status(400).json({ error: error.message });
+
+        // 3. INSERT INTO PUBLIC TABLES
+        if (data.user) {
+            if (assignedRole === 'patient') {
+                const { error: dbError } = await supabase.from('patients').insert([{
+                    id: data.user.id,
+                    email: email,
+                    first_name: firstName,
+                    last_name: lastName,
+                    age:age,
+                    gender:gender,
+                    country:country,
+                    password:password,
+                    assigned_doctor_id: null,
+                    status: "high risk"
+                }]);
+                if (dbError) console.error("❌ Patient Table Insert Error:", dbError.message);
+            } else if (assignedRole === 'doctor') {
+                const { error: dbError } = await supabase.from('doctors').insert([{
+                    id: data.user.id,
+                    name: `${firstName} ${lastName}`,
+                    email: email
+                }]);
+                if (dbError) console.error("❌ Doctor Table Insert Error:", dbError.message);
+            }
+        }
+
+        res.status(200).json({ 
+            message: `Registration successful as ${assignedRole}. Please check your email for confirmation.`,
+            user: data.user 
+        });
+
+    } catch (err) {
+        console.error("Signup Crash:", err);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 };
 
-// Google OAuth Success/Failure Handlers
-export const googleAuth = passport.authenticate('google', {
-  scope: ['profile', 'email'],
-  session: false,
-});
+export const signupPatient = (req, res) => handleSignup(req, res, 'patient');
+export const signupDoctor = (req, res) => handleSignup(req, res, 'doctor');
 
-export const googleAuthCallback = (req, res, next) => {
-  passport.authenticate('google', { session: false }, (err, user, info) => {
-    if (err) {
-      logger.error('Google OAuth Error:', err);
-      return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
+export const login = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const supabase = getSupabase();
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+        if (error) return res.status(401).json({ error: error.message });
+
+        res.status(200).json({ 
+            message: "Welcome back", 
+            token: data.session.access_token,
+            role: data.user.user_metadata.role 
+        });
+    } catch (err) {
+        res.status(500).json({ error: "Login failed" });
     }
-    
-    if (!user) {
-      return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
-    }
-
-    // Generate JWT token
-    const token = generateToken(user);
-    const refreshToken = jwt.sign(
-      { id: user._id },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRY }
-    );
-
-    // Redirect to frontend with tokens
-    res.redirect(
-      `${process.env.FRONTEND_URL}/auth/callback?token=${token}&refreshToken=${refreshToken}`
-    );
-  })(req, res, next);
-};
-
-// Get current user
-export const getCurrentUser = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('-password');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    res.json(user);
-  } catch (error) {
-    logger.error('Get current user error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-};
-
-// Logout (client-side should remove the token)
-export const logout = (req, res) => {
-  res.json({ message: 'Logged out successfully' });
 };
