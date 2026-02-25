@@ -36,7 +36,10 @@ export const handleChat = async (req, res) => {
             - Provide empathetic support and guide users to professional doctors.
             - SCOPE: ONLY discuss mental health, stress, anxiety, and wellness.
             - LANGUAGE: Always match the user's language (English or Amharic).
-        `;
+            -ONLY use the resources provided in this chat.
+            - DO NOT mention international hotlines, external websites, or groups like LGBTQ helpers.
+           -If the user is in high risk, ONLY say that a local doctor from SafeSpace has been notified.
+           -Stay focused ONLY on the local medical intervention provided by this platform. `;
 
         const { data: history } = await supabase
             .from('messages')
@@ -50,21 +53,21 @@ export const handleChat = async (req, res) => {
             parts: [{ text: msg.content }],
         })) : [];
 
-  
+  const highRiskKeywords = /\b(kill|suicide|die|end it all|ራስን ማጥፋት|መሞት|ሞት)\b/i;
         let riskLevel = 'Low';
-        const highRiskKeywords = /(suicide|kill myself|end it all|die|ራስን ማጥፋት|መሞት እፈልጋለሁ|ህይወቴን ማጥፋት|ሞት)/i;
-        
+       
         if (highRiskKeywords.test(message)) {
             riskLevel = 'High';
         }
 
     
-        await supabase.from('messages').insert([{
-            patient_id: patientId,
-            content: message,
-            is_ai_response: false,
-            flagged_reason: riskLevel === 'High' ? 'Suicide Risk' : null
-        }]);
+       const { error: dbError } = await supabase.from('messages').insert([{
+    patient_id: patientId,
+    content: message,
+    is_ai_response: false,
+    risk_score: riskLevel // Ensure this column exists in your DB
+}]);
+if (dbError) console.error("Supabase Save Error:", dbError.message);
 
         const chatSession = model.startChat({ 
             history: formattedHistory 
