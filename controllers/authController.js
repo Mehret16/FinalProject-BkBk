@@ -1,14 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 
+
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+
+const delay = (ms) => new Promise(res => setTimeout(res, ms));
+
 
 const handleSignup = async (req, res, assignedRole) => {
     try {
         const { email, password, firstName, lastName, age, gender, country, adminKey } = req.body;
+        
         const supabase = getSupabase();
+        const supabaseAdmin = getSupabaseAdmin();
 
-        // 1. SECURITY CHECK FOR DOCTORS
+       
         if (assignedRole === 'doctor') {
             const DOCTOR_SECRET = process.env.DOCTOR_SIGNUP_SECRET || 'MY_SUPER_SECRET_123'; 
             if (adminKey !== DOCTOR_SECRET) {
@@ -16,7 +24,7 @@ const handleSignup = async (req, res, assignedRole) => {
             }
         }
 
-        // 2. CREATE AUTH USER
+      
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -27,29 +35,45 @@ const handleSignup = async (req, res, assignedRole) => {
 
         if (error) return res.status(400).json({ error: error.message });
 
-        // 3. INSERT INTO PUBLIC TABLES
+    
         if (data.user) {
+           
+            await delay(500); 
+
+            let dbError = null;
+
             if (assignedRole === 'patient') {
-                const { error: dbError } = await supabase.from('patients').insert([{
+                const { error } = await supabaseAdmin.from('patients').insert([{
                     id: data.user.id,
                     email: email,
                     first_name: firstName,
                     last_name: lastName,
-                    age:age,
-                    gender:gender,
-                    country:country,
-                    password:password,
+                    age: age,
+                    gender: gender,
+                    country: country,
+                    password: password, 
                     assigned_doctor_id: null,
-                    status: "high risk"
+                    status: "Normal" 
                 }]);
-                if (dbError) console.error("❌ Patient Table Insert Error:", dbError.message);
+                dbError = error;
             } else if (assignedRole === 'doctor') {
-                const { error: dbError } = await supabase.from('doctors').insert([{
+                const { error } = await supabaseAdmin.from('doctors').insert([{
                     id: data.user.id,
                     name: `${firstName} ${lastName}`,
                     email: email
                 }]);
-                if (dbError) console.error("❌ Doctor Table Insert Error:", dbError.message);
+                dbError = error;
+            }
+
+    
+            if (dbError) {
+                console.error(`❌ ${assignedRole} Table Insert Error:`, dbError.message);
+                
+                await supabaseAdmin.auth.admin.deleteUser(data.user.id);
+                
+                return res.status(500).json({ 
+                    error: "Profile creation failed. Database connection timed out. Please try again." 
+                });
             }
         }
 
@@ -64,8 +88,11 @@ const handleSignup = async (req, res, assignedRole) => {
     }
 };
 
+
 export const signupPatient = (req, res) => handleSignup(req, res, 'patient');
 export const signupDoctor = (req, res) => handleSignup(req, res, 'doctor');
+
+
 
 export const login = async (req, res) => {
     try {

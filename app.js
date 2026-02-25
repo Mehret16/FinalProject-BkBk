@@ -38,22 +38,13 @@ app.use(
   })
 );
 
-// Initialize Passport
 app.use(passport.initialize());
 app.use(passport.session());
-
-// Import passport config
 import './config/passport.js';
-
-// Routes
 app.use('/api/auth', authRoutes);
-
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-
-// Error handling middleware
 app.use((err, req, res, next) => {
   logger.error(err.stack);
   res.status(500).json({ 
@@ -61,8 +52,6 @@ app.use((err, req, res, next) => {
     message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 });
-
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
