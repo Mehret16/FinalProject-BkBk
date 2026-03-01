@@ -47,6 +47,7 @@ const handleSignup = async (req, res, assignedRole) => {
                 const { error } = await supabaseAdmin.from('patients').insert([{
                     id: data.user.id,        
                     email: email,
+                    role:'patient',
                     first_name: firstName,
                     last_name: lastName,
                     age: age,
@@ -61,7 +62,8 @@ const handleSignup = async (req, res, assignedRole) => {
                 const { error } = await supabaseAdmin.from('doctors').insert([{
                     id: data.user.id,
                     name: `${firstName} ${lastName}`,
-                    email: email
+                    email: email,
+                    role: 'doctor',
                 }]);
                 dbError = error;
             }

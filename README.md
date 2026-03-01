@@ -5,78 +5,66 @@ A production-ready Node.js + Express backend for a mental health support chatbot
 ## 🎯 Features
 
 ✅ **Authentication & Authorization**
-- JWT-based authentication
-- Role-Based Access Control (Patient, Therapist, Admin)
-- Secure password hashing with bcrypt
-- Token refresh mechanism
+- Supabase-based authentication system
+- Role-Based Access Control (Patient, Doctor/Therapist)
+- JWT token verification via Supabase Auth
+- Secure signup with secret key protection for doctors
 
 ✅ **Chat System**
-- Real-time chat sessions
-- Language detection (English/Amharic)
-- Sentiment analysis
-- Distress keyword detection
-- Session escalation logic
-- Chat history management
+- Real-time chat sessions with AI-powered responses
+- Google Gemini AI integration for intelligent conversations
+- Sentiment analysis and emotional support
+- High-risk patient detection and alerts
+- Chat history management and persistence
 
-✅ **Referral System** ⭐ (Key Feature)
-- Patients refer to therapists
-- Therapist email notifications with access links
-- Unique JWT access tokens (7-day validity)
-- Therapist gets full access to:
-  - Patient profile
-  - All chat sessions
-  - Complete conversation history
-  - Referral details
+✅ **Doctor Assignment & Referral System** ⭐ (Key Feature)
+- Patients can view and select from available doctors
+- Doctor assignment with notification system
+- High-risk patient alerts for doctors
+- Secure doctor-patient communication channels
+- Professional mental health support integration
 
-✅ **Therapist Dashboard**
-- View assigned patients
-- Access patient reports
-- Review conversation logs
-- Manage referrals
-- Track sentiment trends
+✅ **Doctor Dashboard**
+- View assigned patients and their chat histories
+- Access patient profiles and risk assessments
+- Review conversation logs and sentiment trends
+- Respond to patient messages directly
+- Manage high-risk patient alerts
 
-✅ **Admin Dashboard**
-- User management
-- System analytics
-- Sentiment trend analysis
-- Usage statistics
-- Audit logging
-- Referral tracking
-
-✅ **Mental Health Resources**
-- Bilingual content management
-- Category-based organization
-- Public access APIs
-- Admin-controlled publishing
+✅ **AI-Powered Support**
+- Google Gemini API for intelligent chat responses
+- Contextual understanding and emotional support
+- Crisis detection and escalation protocols
+- Bilingual support capabilities (English/Amharic)
 
 ✅ **Security & Privacy**
-- GDPR-style compliance
-- Audit logging
-- Consent tracking
-- Data anonymization support
+- Supabase Auth for secure user management
+- Role-based data access control
 - Input validation & sanitization
+- CORS protection for multiple frontend domains
+- Secure API endpoints with token verification
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Runtime:** Node.js
+- **Runtime:** Node.js (ES Modules)
 - **Framework:** Express.js
-- **Database:** MySQL
-- **Authentication:** JWT (JSON Web Tokens)
-- **Password Hashing:** bcrypt
-- **Logging:** Winston
-- **Email:** Nodemailer
-- **Config:** dotenv
+- **Database:** Supabase (PostgreSQL)
+- **Authentication:** Supabase Auth
+- **AI Services:** Google Gemini API
+- **Security:** CORS, Express Rate Limiting
+- **Environment:** dotenv
+- **Development:** nodemon, cross-env
 
 ---
 
 ## 📋 Prerequisites
 
 - Node.js v16+
-- MySQL 8.0+
+- Supabase account and project
+- Google Gemini API key
 - npm or yarn
-- Email service (Gmail, SendGrid, etc.)
 
 ---
 
@@ -85,86 +73,51 @@ A production-ready Node.js + Express backend for a mental health support chatbot
 ### 1. Clone and Setup
 
 ```bash
-# Navigate to backend directory
-cd backend
+# Clone the repository
+git clone <repository-url>
+cd FinalProject-BkBk
 
 # Install dependencies
 npm install
 ```
 
-### 2. Database Setup
+### 2. Environment Configuration
 
-```bash
-# Create .env file
-cp .env.example .env
-
-# Edit .env with your database credentials
-nano .env  # or use your preferred editor
-```
-
-**Database Configuration in .env:**
-```
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=mental_health_chatbot
-```
-
-### 3. Initialize Database
-
-```bash
-# Login to MySQL
-mysql -u root -p
-
-# Run schema file
-mysql -u root -p < database/schema.sql
-```
-
-Or import via MySQL client:
-```sql
-USE mental_health_chatbot;
-SOURCE database/schema.sql;
-```
-
-### 4. Configure Environment Variables
-
-Edit `.env` file with your settings:
+Create a `.env` file in the root directory:
 
 ```env
-# DATABASE
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_mysql_password
-DB_NAME=mental_health_chatbot
+# Supabase Configuration
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-# JWT
-JWT_SECRET=your_super_secret_key_change_this_in_production
-JWT_REFRESH_SECRET=your_refresh_secret_key
-JWT_EXPIRY=15m
-JWT_REFRESH_EXPIRY=7d
+# Google AI Configuration
+GEMINI_API_KEY=your_google_gemini_api_key
 
-# SERVER
+# Doctor Signup Security
+DOCTOR_SIGNUP_SECRET=your_secret_key_for_doctor_signup
+
+# Server Configuration
 PORT=5000
-NODE_ENV=development
-
-# EMAIL (for sending therapist notifications)
-EMAIL_SERVICE=gmail
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASSWORD=your_app_password  # Use app-specific password for Gmail
-EMAIL_FROM=noreply@mentalhealth.com
-
-# FRONTEND
-FRONTEND_URL=http://localhost:3000
-
-# OPTIONAL
-NLP_SERVICE_URL=http://localhost:8000
-REDIS_URL=redis://localhost:6379
-LOG_LEVEL=debug
 ```
 
-### 5. Start Server
+**Getting your credentials:**
+1. **Supabase:** Create a project at [supabase.com](https://supabase.com) and get URL + keys from Settings > API
+2. **Google Gemini:** Get API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+3. **Doctor Secret:** Create a secure secret key for doctor signup protection
+
+### 3. Database Setup
+
+Set up your Supabase database with the required tables:
+- `patients` - Patient profiles and information
+- `doctors` - Doctor profiles and specializations  
+- `chat_sessions` - Chat session records
+- `chat_messages` - Individual chat messages
+- `doctor_assignments` - Doctor-patient relationships
+
+You can use the Supabase dashboard SQL editor or migrate via the Supabase CLI.
+
+### 4. Start Server
 
 ```bash
 # Development mode (with hot reload)
@@ -176,23 +129,19 @@ npm start
 
 Expected output:
 ```
-🚀 Server running on port 5000
-Environment: development
+🚀 Server is working on port 5000
+Checking Supabase... Client Initialized
 ```
 
-### 6. Test Health Check
+### 5. Test Health Check
 
 ```bash
-curl http://localhost:5000/health
+curl http://localhost:5000/
 ```
 
 Expected response:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-01-15T10:35:00Z",
-  "database": "connected"
-}
+```
+Mental Health API is running :rocket:
 ```
 
 ---
@@ -200,42 +149,26 @@ Expected response:
 ## 📁 Project Structure
 
 ```
-backend/
-├── config/
-│   ├── database.js       # MySQL connection pool
-│   ├── logger.js         # Winston logging configuration
-│   └── email.js          # Nodemailer setup & email templates
+FinalProject-BkBk/
+├── controllers/               # Business logic controllers
+│   ├── authController.js      # Authentication & user management
+│   ├── chatController.js      # Chat handling & AI integration
+│   └── doctorController.js    # Doctor management & assignments
 │
-├── middleware/
-│   ├── auth.js           # JWT verification & RBAC
-│   ├── errorHandler.js   # Global error handling
-│   └── validation.js     # Input validation utilities
+├── middleware/               # Custom middleware
+│   └── authMiddleware.js      # Supabase token verification
 │
-├── services/
-│   ├── authService.js      # Authentication logic
-│   ├── userService.js      # User management
-│   ├── chatService.js      # Chat & NLP processing
-│   └── referralService.js  # Referral & access token logic
+├── routes/                   # API route definitions
+│   ├── authRoutes.js         # Authentication endpoints
+│   └── chatRoutes.js         # Chat & doctor endpoints
 │
-├── routes/
-│   ├── auth.js         # Authentication endpoints
-│   ├── users.js        # User management endpoints
-│   ├── chat.js         # Chat endpoints
-│   ├── referrals.js    # Referral endpoints (KEY FILE)
-│   ├── therapist.js    # Therapist dashboard
-│   ├── admin.js        # Admin endpoints
-│   └── resources.js    # Mental health resources
-│
-├── database/
-│   └── schema.sql      # Complete MySQL schema
-│
-├── logs/               # Log files (created automatically)
-│
-├── server.js           # Express app initialization
-├── package.json        # Dependencies
-├── .env.example        # Environment template
-├── API_ENDPOINTS.md    # API documentation
-└── README.md          # This file
+├── .env                      # Environment variables (create this)
+├── .gitignore                # Git ignore rules
+├── package.json              # Dependencies & scripts
+├── server.js                 # Express app entry point
+├── app.js                    # Alternative app configuration
+├── test-db.js                # Database connection testing
+└── README.md                 # This file
 ```
 
 ---
@@ -244,214 +177,139 @@ backend/
 
 ### Authentication
 ```
-POST   /api/auth/register      - Register new user
-POST   /api/auth/login         - Login & get tokens
-GET    /api/auth/me            - Get current user (protected)
+POST   /api/auth/signup           - Register new patient
+POST   /api/auth/signup-doctor    - Register new doctor (requires secret)
+POST   /api/auth/login             - Login user
+POST   /api/auth/logout            - Logout user
 ```
 
-### Chat
+### Chat & Communication
 ```
-POST   /api/chat/session/create    - Create chat session
-POST   /api/chat/message           - Send message
-GET    /api/chat/history/:id       - Get chat history
-POST   /api/chat/escalate/:id      - Escalate session
-```
-
-### Referrals (Core Feature)
-```
-POST   /api/referrals/create       - Patient creates referral
-GET    /api/referrals/therapist    - Therapist gets referrals
-POST   /api/referrals/access       - Therapist accesses patient data with token
-GET    /api/referrals/patient/:id  - Get patient data by referral
+POST   /api/chat/send              - Send chat message (AI response)
+GET    /api/chat/history/:patientId - Get chat history
+POST   /api/chat/notify-doctor     - Notify selected doctor
 ```
 
-### Therapist
+### Doctor Management
 ```
-GET    /api/therapist/dashboard        - Therapist dashboard
-GET    /api/therapist/patients         - List assigned patients
-GET    /api/therapist/patient/:id/report    - Patient report
-GET    /api/therapist/patient/:id/conversations - Chat history
+GET    /api/chat/doctors           - Get available doctors
+POST   /api/chat/assign            - Assign doctor to patient
+GET    /api/chat/alerts            - Get high-risk patient alerts
+POST   /api/chat/reply             - Doctor reply to patient
 ```
-
-### Admin
-```
-GET    /api/admin/dashboard       - System overview
-GET    /api/admin/users           - User management
-GET    /api/admin/analytics/*     - Analytics endpoints
-POST   /api/admin/assign-therapist - Assign therapist to patient
-```
-
-### Resources
-```
-GET    /api/resources             - Get resources
-GET    /api/resources/categories  - Get categories
-POST   /api/resources             - Create resource (admin)
-```
-
-See [API_ENDPOINTS.md](./API_ENDPOINTS.md) for complete documentation.
 
 ---
 
 ## 🔐 Security Features
 
 ### Authentication
-- JWT tokens with expiration
-- Refresh token mechanism
-- bcrypt password hashing (12 rounds)
-- Token blacklist support
-
-### Authorization
-- Role-based access control (RBAC)
-- Row-level security for patient data
-- Therapist can only access assigned patients
-- Admin audit logging
+- Supabase Auth integration with JWT tokens
+- Role-based access control (Patient/Doctor)
+- Secret key protection for doctor signup
+- Secure session management
 
 ### Data Protection
-- Input sanitization & validation
-- SQL injection prevention (parameterized queries)
-- CORS configuration
-- Rate limiting ready
-- Sensitive field encryption support
+- Input validation & sanitization
+- CORS configuration for multiple frontend domains
+- Rate limiting capabilities
+- Secure API endpoint access control
 
-### Privacy
-- Audit logging of admin actions
-- Consent tracking
-- Data anonymization support
-- GDPR-style compliance
-
----
-
-## 🔗 Referral Workflow (Important)
-
-### What Happens When Patient Refers to Therapist:
-
-1. **Patient initiates referral:**
-   ```
-   POST /api/referrals/create
-   {
-     "therapistId": 2,
-     "reason": "Need professional help",
-     "urgency": "high"
-   }
-   ```
-
-2. **System creates referral with unique access token:**
-   - JWT token generated (valid 7 days)
-   - Token contains: patientId, therapistId, type='referral_access'
-   - Stored in database
-
-3. **Email sent to therapist:**
-   - Subject: "New Patient Referral: [Patient Name]"
-   - Contains: Access button with full URL including token
-   - Example: `https://frontend.com/therapist/referral?access_token=JWT_TOKEN&referral_id=1`
-
-4. **Therapist clicks email link:**
-   - Frontend extracts `access_token` from URL
-   - Sends to: `POST /api/referrals/access?access_token=TOKEN`
-
-5. **Therapist gets full access:**
-   ```json
-   {
-     "patient": {
-       "id": 1,
-       "name": "John Doe",
-       "email": "john@example.com",
-       ...
-     },
-     "chatSessions": [...],
-     "messages": [
-       {
-         "id": 1,
-         "message_text": "I'm feeling depressed...",
-         "sentiment_score": -0.7,
-         "created_at": "..."
-       }
-     ],
-     "referralDetails": {...}
-   }
-   ```
-
-### Access Token Features:
-- ✅ Time-limited (7 days)
-- ✅ One-time use recommended (after first access)
-- ✅ Therapist ID bound (only assigned therapist can use)
-- ✅ Patient ID bound (specific patient data only)
-- ✅ Email verification (access logged)
+### Database Security
+- Supabase Row Level Security (RLS) policies
+- Encrypted connections to database
+- Role-based data access patterns
+- Service role key for admin operations
 
 ---
 
-## 📊 Database Schema
+## 🤖 AI Integration
+
+### Google Gemini API
+The system uses Google Gemini AI to provide intelligent, empathetic responses to patients:
+
+**Features:**
+- Contextual understanding of mental health conversations
+- Emotional support and crisis detection
+- Bilingual support (English/Amharic)
+- Safe and appropriate response generation
+- Integration with sentiment analysis
+
+**Implementation:**
+- API key configured via `GEMINI_API_KEY` environment variable
+- Responses are processed through safety filters
+- High-risk detection triggers doctor notifications
+- Conversation context maintained for coherent dialogue
+
+---
+
+## 📊 Database Schema (Supabase)
 
 ### Main Tables:
 
-**users** - User accounts with roles
-**roles** - Patient, Therapist, Admin
-**chat_sessions** - Conversation sessions
-**chat_messages** - Individual messages with sentiment/emotion
-**referrals** - Patient → Therapist referrals with access tokens
-**therapist_specializations** - Therapist profile details
-**therapist_assignments** - Admin-assigned therapists to patients
-**mental_health_resources** - Bilingual educational content
-**audit_logs** - System action tracking
-**consent_logs** - GDPR consent tracking
+**patients** - Patient profiles and demographics
+**doctors** - Doctor profiles and specializations
+**chat_sessions** - Chat session tracking
+**chat_messages** - Individual messages with metadata
+**doctor_assignments** - Doctor-patient relationships
 
-Full schema: [database/schema.sql](./database/schema.sql)
+All tables are managed through Supabase with appropriate Row Level Security (RLS) policies to ensure data privacy and access control.
 
 ---
 
 ## 🧪 Testing Endpoints
 
-### 1. Register User
+### 1. Register Patient
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST http://localhost:5000/api/auth/signup \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "testuser",
-    "email": "test@example.com",
-    "password": "TestPass123",
-    "firstName": "Test",
-    "lastName": "User",
-    "role": "patient"
+    "email": "patient@example.com",
+    "password": "SecurePass123",
+    "firstName": "John",
+    "lastName": "Doe",
+    "age": 25,
+    "gender": "male",
+    "country": "Ethiopia"
   }'
 ```
 
-### 2. Login
+### 2. Register Doctor (with secret)
+```bash
+curl -X POST http://localhost:5000/api/auth/signup-doctor \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "doctor@example.com",
+    "password": "SecurePass123",
+    "firstName": "Dr. Sarah",
+    "lastName": "Johnson",
+    "adminKey": "MY_SUPER_SECRET_123"
+  }'
+```
+
+### 3. Login
 ```bash
 curl -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "test@example.com",
-    "password": "TestPass123"
+    "email": "patient@example.com",
+    "password": "SecurePass123"
   }'
 ```
 
-### 3. Get Profile (with token)
+### 4. Send Chat Message (with token)
 ```bash
-curl -X GET http://localhost:5000/api/auth/me \
-  -H "Authorization: Bearer <your_access_token>"
-```
-
-### 4. Create Chat Session
-```bash
-curl -X POST http://localhost:5000/api/chat/session/create \
-  -H "Authorization: Bearer <your_access_token>" \
+curl -X POST http://localhost:5000/api/chat/send \
+  -H "Authorization: Bearer <your_supabase_token>" \
   -H "Content-Type: application/json" \
-  -d '{"language": "en"}'
+  -d '{
+    "message": "I am feeling anxious today",
+    "sessionId": "session_id_or_null"
+  }'
 ```
 
 ---
 
-## 📝 Logging
-
-Logs are created in `logs/` directory:
-- `logs/combined.log` - All logs
-- `logs/error.log` - Errors only
-
-Log format includes timestamp, level, message, and context.
-
----
-
-## 🚨 Error Handling
+##  Error Handling
 
 All endpoints return consistent error format:
 ```json
@@ -461,134 +319,144 @@ All endpoints return consistent error format:
 }
 ```
 
-Error codes:
-- 400: Bad Request
-- 401: Unauthorized
-- 403: Forbidden
-- 404: Not Found
-- 409: Conflict
-- 500: Internal Server Error
+Common error codes:
+- 400: Bad Request (validation errors)
+- 401: Unauthorized (invalid/missing token)
+- 403: Forbidden (insufficient permissions)
+- 404: Not Found (resource doesn't exist)
+- 500: Internal Server Error (database/API issues)
 
 ---
 
 ## 🔄 Environment Variables
 
-Create `.env` file from `.env.example`:
-
-```bash
-cp .env.example .env
-```
+Create `.env` file with the following variables:
 
 **Required variables:**
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
-- `JWT_SECRET`, `JWT_REFRESH_SECRET`
-- `PORT`
+```env
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key  
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+GEMINI_API_KEY=your_google_gemini_api_key
+DOCTOR_SIGNUP_SECRET=your_secure_secret_key
+PORT=5000
+```
 
-**Optional but recommended:**
-- `EMAIL_*` - For therapist notifications
-- `FRONTEND_URL` - For CORS and email links
-- `LOG_LEVEL` - debug, info, warn, error
+**Optional variables:**
+```env
+NODE_ENV=development  # or production
+```
 
 ---
 
-## 📈 Performance Optimizations
+## 📈 Architecture Overview
 
-- Connection pooling (10 connections)
-- Database indexes on frequently queried fields
-- JWT token caching
-- Query optimization with JOINs
+### Frontend Integration
+The backend supports multiple frontend origins:
+- `https://mental-health-safespace.netlify.app` (production)
+- `http://localhost:3000` (development)
+- `http://localhost:5173`, `http://localhost:5174`, `http://localhost:5175` (Vite dev servers)
+
+### Authentication Flow
+1. User registers via Supabase Auth
+2. Supabase returns JWT token
+3. Frontend includes token in Authorization header
+4. Backend verifies token via Supabase middleware
+5. User data and role extracted from token metadata
+
+### AI Chat Flow
+1. Patient sends message to `/api/chat/send`
+2. System analyzes message for risk indicators
+3. Message sent to Google Gemini API
+4. AI response processed and returned
+5. High-risk content triggers doctor notifications
+6. Conversation stored in Supabase database
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Database Connection Error
+### Supabase Connection Error
+```bash
+Error: Supabase client initialization failed
 ```
-Error: connect ECONNREFUSED 127.0.0.1:3306
+- Verify SUPABASE_URL and SUPABASE_ANON_KEY in .env
+- Check Supabase project is active
+- Test connection: `node test-db.js`
+
+### Gemini API Error
+```bash
+Error: Invalid API key
 ```
-- Check MySQL is running: `mysql -u root -p`
-- Verify .env credentials
-- Ensure database exists: `CREATE DATABASE mental_health_chatbot;`
+- Verify GEMINI_API_KEY is correct
+- Check API key is enabled for Gemini API
+- Ensure billing is set up in Google Cloud
 
-### JWT Secret Error
-- Ensure `JWT_SECRET` is set in .env
-- Change secret before production deployment
+### Doctor Signup Failed
+```bash
+Error: Unauthorized: Invalid Doctor Secret Key
+```
+- Verify DOCTOR_SIGNUP_SECRET matches .env
+- Check adminKey is being sent in request body
+- Ensure secret key is properly escaped
 
-### Email Not Sending
-- Check EMAIL_* variables in .env
-- For Gmail: Use app-specific password
-- For other providers: Verify SMTP credentials
-- Test: `npm test` (when test file is added)
+### CORS Issues
+- Verify your frontend URL is in CORS origins list
+- Check credentials are being sent with requests
+- Ensure preflight OPTIONS requests are handled
 
 ---
 
 ## 🚀 Production Deployment
 
-### Before Deploying:
+### Environment Setup
+```env
+NODE_ENV=production
+PORT=5000
+```
 
-1. **Security:**
-   ```bash
-   # Change all secrets
-   JWT_SECRET=<generate_new_secure_key>
-   JWT_REFRESH_SECRET=<generate_new_secure_key>
-   ```
+### Security Considerations
+1. **Environment Variables:** Use secure secrets management
+2. **Supabase RLS:** Enable Row Level Security policies
+3. **API Keys:** Rotate keys regularly and monitor usage
+4. **Rate Limiting:** Configure rate limiting for production
+5. **Monitoring:** Set up error tracking and monitoring
 
-2. **Database:**
-   - Use external managed database (AWS RDS, Google Cloud SQL)
-   - Enable SSL/TLS connections
-   - Use strong passwords
-
-3. **Environment:**
-   ```env
-   NODE_ENV=production
-   PORT=5000
-   ```
-
-4. **Logging:**
-   - Send logs to external service (Sentry, DataDog)
-   - Set appropriate LOG_LEVEL
-
-5. **Email:**
-   - Use production email service
-   - Configure SPF/DKIM records
-   - Test email delivery
-
-### Deployment Platforms:
-- Vercel (with serverless functions)
-- Heroku
-- AWS Lambda
-- Google Cloud Run
-- DigitalOcean
-- Azure App Service
+### Deployment Platforms
+- **Vercel:** Serverless functions (recommended)
+- **Heroku:** Dyno-based deployment
+- **AWS:** Lambda + API Gateway
+- **DigitalOcean:** App Platform
+- **Railway:** Container-based deployment
 
 ---
 
-## 📚 Related Files
+## � Development Notes
 
-- [API_ENDPOINTS.md](./API_ENDPOINTS.md) - Complete API documentation
-- [database/schema.sql](./database/schema.sql) - Database schema
-- [.env.example](./.env.example) - Environment template
+### Current Implementation Status
+- ✅ Supabase authentication integration
+- ✅ Google Gemini AI chat functionality  
+- ✅ Doctor-patient assignment system
+- ✅ High-risk patient detection
+- ✅ CORS configuration for multiple frontends
+- ✅ Role-based access control
+- ✅ Secure doctor signup with secret key
 
----
-
-## 📝 Notes
-
-- Frontend exists separately - this is backend-only
-- All data is stored in MySQL, not in-memory
-- Bilingual support for en/am languages
-- Real-world production-ready code
-- Complete RBAC implementation
-- Full audit trail for compliance
+### Tech Decisions
+- **Supabase:** Chosen for managed PostgreSQL + Auth
+- **Google Gemini:** Selected for advanced AI capabilities
+- **Express.js:** Lightweight and flexible framework
+- **ES Modules:** Modern JavaScript syntax support
 
 ---
 
 ## 📧 Support
 
 For issues or questions:
-1. Check API_ENDPOINTS.md
-2. Review error logs in logs/ directory
-3. Verify .env configuration
-4. Check database schema matches
+1. Check environment variables configuration
+2. Verify Supabase connection: `node test-db.js`
+3. Review API key validity and permissions
+4. Check CORS settings for your frontend domain
 
 ---
 
