@@ -111,3 +111,12 @@ export const login = async (req, res) => {
         res.status(500).json({ error: "Login failed" });
     }
 };
+export const logout = async (req, res) => {
+    try {
+        const supabase = getSupabase();
+        await supabase.auth.signOut(); 
+        res.status(200).json({ message: "Logged out successfully" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
