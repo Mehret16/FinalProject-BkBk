@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import 'dotenv/config'; // 1. Load environment variables first
+import 'dotenv/config'; 
 
 
 const supabase = createClient(
@@ -7,29 +7,34 @@ const supabase = createClient(
     process.env.SUPABASE_ANON_KEY
 );
 
-// 3. Now it is safe to log
 console.log("Checking Supabase...", supabase ? "Client Initialized" : "Client Failed");
 
 export const verifyToken = async (req, res, next) => {
-    // Look for token in Authorization header or Cookies
-    const token = req.headers.authorization?.split(' ')[1] || req.cookies?.token;
-
+const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') 
+        ? authHeader.split(' ')[1] 
+        : req.cookies?.token;
     if (!token) {
-        return res.status(401).json({ error: "Please login first. No token found." });
+        return res.status(401).json({ error: "Authentication required. Please login." });
     }
 
     try {
-        // Verify the token with Supabase
+        // 2. Verify token with Supabase
         const { data: { user }, error } = await supabase.auth.getUser(token);
 
         if (error || !user) {
-            return res.status(401).json({ error: "Invalid session or token expired." });
+            return res.status(401).json({ error: "Session expired. Please login again." });
         }
+        const assignedRole = user.user_metadata?.role || 'patient';
 
-        // Attach user to the request object for the next middleware/route
-        req.user = user; 
+        req.user = {
+            ...user,
+            role: assignedRole
+        };
+
         next();
     } catch (err) {
+        console.error("Auth Middleware Crash:", err.message);
         return res.status(500).json({ error: "Internal server error during authentication." });
     }
 };
