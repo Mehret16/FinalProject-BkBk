@@ -103,13 +103,14 @@ export const login = async (req, res) => {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) return res.status(401).json({ error: error.message });
-
+const userRole = data.user.user_metadata?.role || 'patient';
         res.status(200).json({ 
             message: "Welcome back! Login successful.", 
             token: data.session.access_token,
-            role
+            role: userRole
         });
     } catch (err) {
+        console.error("Login Error:", err);
         res.status(500).json({ error: "Login failed" });
     }
 };
