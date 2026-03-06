@@ -59,26 +59,50 @@ export const handleChat = async (req, res) => {
 
   const highRiskKeywords = /\b(kill|suicide|die|end it all|ራስን ማጥፋት|መሞት|ሞት)\b/i;
         let riskLevel = 'Low';
+        let isCrisis = false;
         let isHighRisk = false;
        
+        // Crisis Detection BEFORE calling Gemini API
         if (highRiskKeywords.test(message)) {
             riskLevel = 'High';
+            isCrisis = true;
             isHighRisk = true;
+            
+            console.log('🚨 Crisis detected, updating patient status immediately');
+            
+            // Update patient status to High and flagged_reason to Suicide Risk
+            const { error: statusError } = await supabase
+                .from('patients')
+                .update({ 
+                    status: 'High',
+                    flagged_reason: 'Suicide Risk'
+                })
+                .eq('id', patientId);
+            
+            if (statusError) {
+                console.error('❌ Failed to update patient status:', statusError.message);
+                // Don't throw error, continue with crisis response
+            } else {
+                console.log('✅ Patient status updated to High with flagged_reason: Suicide Risk');
+            }
         }
 
     
-       // Insert user message with proper risk tracking and RLS compliance
-        const { error: dbError } = await supabase.from('messages').insert([{
-            patient_id: req.user.userId, // Use req.user.userId for RLS
-            content: message,
-            is_ai_response: false,
-            role: 'user', // Add role column for schema compliance
-            flagged_reason: riskLevel === 'High' ? 'Crisis' : null
-        }]);
-        
-        if (dbError) {
-            console.error("❌ Supabase Save Error (User Message):", dbError.message);
-            throw dbError;
+       // Insert user message with proper error handling
+        try {
+            const { error: dbError } = await supabase.from('messages').insert([{
+                patient_id: req.user.userId,
+                content: message,
+                role: 'user'
+            }]);
+            
+            if (dbError) {
+                console.error("❌ Supabase Save Error (User Message):", dbError.message);
+                return res.status(400).json({ error: dbError.message });
+            }
+        } catch (insertError) {
+            console.error("❌ Database Insert Error:", insertError.message);
+            return res.status(400).json({ error: insertError.message });
         }
 
         const chatSession = model.startChat({ 
@@ -168,17 +192,21 @@ export const handleChat = async (req, res) => {
             // Don't throw error, continue with response
         }
 
-        // Generate specific high-risk response if needed
+        // Generate specific crisis response if needed
         let finalReply = aiReply;
         let redirectToDoctor = false;
         
-        if (riskLevel === 'High') {
+        if (isCrisis) {
+            finalReply = "I am concerned about your safety. Please reach out to one of the doctors listed on your dashboard immediately.";
+            redirectToDoctor = true;
+        } else if (riskLevel === 'High') {
             finalReply = "I've detected that you're going through a very difficult time. I am connecting you with our available healthcare professionals immediately. Please select a doctor from the list below for immediate help.";
             redirectToDoctor = true;
         }
 
         console.log('✅ Chat processed successfully:', { 
             riskLevel, 
+            isCrisis,
             doctorsAvailable: availableDoctors.length,
             messageLength: finalReply.length,
             redirectToDoctor
@@ -188,6 +216,7 @@ export const handleChat = async (req, res) => {
             risk: riskLevel, 
             reply: finalReply, 
             doctors: availableDoctors,
+            isCrisis: isCrisis, 
             isHighRisk: isHighRisk, 
             redirectToDoctor: redirectToDoctor
         });
