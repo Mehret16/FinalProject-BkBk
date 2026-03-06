@@ -97,6 +97,7 @@ export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
         const supabase = getSupabase();
+        const supabaseAdmin = getSupabaseAdmin();
         
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -108,13 +109,54 @@ export const login = async (req, res) => {
             return res.status(404).json({ error: "User not found." });
         }
 
-        // 3. Extract role safely from metadata
-        const userRole = data.user.user_metadata?.role || 'patient';
+        // 3. Extract role from metadata first
+        let userRole = data.user.user_metadata?.role;
+        
+        // 4. If role not in metadata, fetch from database tables
+        if (!userRole) {
+            console.log('🔍 Role not in metadata, checking database...');
+            
+            // Check patients table first
+            const { data: patientData, error: patientError } = await supabaseAdmin
+                .from('patients')
+                .select('role')
+                .eq('id', data.user.id)
+                .single();
+            
+            if (!patientError && patientData) {
+                userRole = patientData.role;
+                console.log('✅ Found role in patients table:', userRole);
+            } else {
+                // Check doctors table
+                const { data: doctorData, error: doctorError } = await supabaseAdmin
+                    .from('doctors')
+                    .select('id')
+                    .eq('id', data.user.id)
+                    .single();
+                
+                if (!doctorError && doctorData) {
+                    userRole = 'doctor';
+                    console.log('✅ Found role in doctors table:', userRole);
+                }
+            }
+        }
+
+        // 5. Default to patient if still not found
+        if (!userRole) {
+            userRole = 'patient';
+            console.log('⚠️ Role not found, defaulting to patient');
+        }
+
+        console.log('🔑 Login Success:', { email, userId: data.user.id, role: userRole });
 
         res.status(200).json({ 
             message: "Welcome back! Login successful.", 
             token: data.session?.access_token,
-            role: userRole
+            role: userRole,
+            user: {
+                id: data.user.id,
+                email: data.user.email
+            }
         });
     } catch (err) {
         console.error("Login Error:", err);
