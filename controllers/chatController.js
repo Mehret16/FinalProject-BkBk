@@ -65,12 +65,13 @@ export const handleChat = async (req, res) => {
         }
 
     
-       // Insert user message with proper risk tracking
+       // Insert user message with proper risk tracking and RLS compliance
         const { error: dbError } = await supabase.from('messages').insert([{
-            patient_id: patientId,
+            patient_id: req.user.id, // Explicitly use req.user.id for RLS
             content: message,
             is_ai_response: false,
-            flagged_reason: riskLevel === 'High' ? 'Suicide Risk' : null
+            role: 'user', // Add role column for schema compliance
+            flagged_reason: riskLevel === 'High' ? 'crisis' : null
         }]);
         
         if (dbError) {
@@ -94,10 +95,13 @@ export const handleChat = async (req, res) => {
         if (riskLevel === 'High') {
             console.log('🚨 High-risk message detected, updating patient status and fetching doctors');
             
-            // Update patient status to High
+            // Update patient status to High and flagged_reason to crisis
             const { error: statusError } = await supabase
                 .from('patients')
-                .update({ status: 'High' })
+                .update({ 
+                    status: 'High',
+                    flagged_reason: 'crisis'
+                })
                 .eq('id', patientId);
             
             if (statusError) {
@@ -105,7 +109,7 @@ export const handleChat = async (req, res) => {
                 throw statusError;
             }
             
-            console.log('✅ Patient status updated to High');
+            console.log('✅ Patient status updated to High with flagged_reason: crisis');
             
             // Fetch available doctors with proper error handling
             const { data: docs, error: doctorsError } = await supabase
@@ -164,20 +168,25 @@ export const handleChat = async (req, res) => {
 
         // Generate specific high-risk response if needed
         let finalReply = aiReply;
+        let redirectToDoctor = false;
+        
         if (riskLevel === 'High') {
             finalReply = "I've detected that you're going through a very difficult time. I am connecting you with our available healthcare professionals immediately. Please select a doctor from the list on the left to talk to someone who can help you right now.";
+            redirectToDoctor = true;
         }
 
         console.log('✅ Chat processed successfully:', { 
             riskLevel, 
             doctorsAvailable: availableDoctors.length,
-            messageLength: finalReply.length
+            messageLength: finalReply.length,
+            redirectToDoctor
         });
 
         res.status(200).json({ 
             risk: riskLevel, 
             reply: finalReply, 
-            doctors: availableDoctors 
+            doctors: availableDoctors,
+            redirectToDoctor: redirectToDoctor
         });
 
     } catch (err) {
