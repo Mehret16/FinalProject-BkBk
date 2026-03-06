@@ -59,19 +59,21 @@ export const handleChat = async (req, res) => {
 
   const highRiskKeywords = /\b(kill|suicide|die|end it all|ራስን ማጥፋት|መሞት|ሞት)\b/i;
         let riskLevel = 'Low';
+        let isHighRisk = false;
        
         if (highRiskKeywords.test(message)) {
             riskLevel = 'High';
+            isHighRisk = true;
         }
 
     
        // Insert user message with proper risk tracking and RLS compliance
         const { error: dbError } = await supabase.from('messages').insert([{
-            patient_id: req.user.id, // Explicitly use req.user.id for RLS
+            patient_id: req.user.userId, // Use req.user.userId for RLS
             content: message,
             is_ai_response: false,
             role: 'user', // Add role column for schema compliance
-            flagged_reason: riskLevel === 'High' ? 'crisis' : null
+            flagged_reason: riskLevel === 'High' ? 'Crisis' : null
         }]);
         
         if (dbError) {
@@ -155,7 +157,7 @@ export const handleChat = async (req, res) => {
        
         // Insert AI response with proper role
         const { error: aiResponseError } = await supabase.from('messages').insert([{
-            patient_id: patientId,
+            patient_id: req.user.userId, // Use req.user.userId for RLS
             content: aiReply,
             is_ai_response: true,
             role: 'ai'
@@ -171,7 +173,7 @@ export const handleChat = async (req, res) => {
         let redirectToDoctor = false;
         
         if (riskLevel === 'High') {
-            finalReply = "I've detected that you're going through a very difficult time. I am connecting you with our available healthcare professionals immediately. Please select a doctor from the list on the left to talk to someone who can help you right now.";
+            finalReply = "I've detected that you're going through a very difficult time. I am connecting you with our available healthcare professionals immediately. Please select a doctor from the list below for immediate help.";
             redirectToDoctor = true;
         }
 
@@ -186,6 +188,7 @@ export const handleChat = async (req, res) => {
             risk: riskLevel, 
             reply: finalReply, 
             doctors: availableDoctors,
+            isHighRisk: isHighRisk, 
             redirectToDoctor: redirectToDoctor
         });
 
