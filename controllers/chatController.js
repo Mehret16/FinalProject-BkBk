@@ -61,13 +61,18 @@ export const handleChat = async (req, res) => {
         }
 
     
-       const { error: dbError } = await supabase.from('messages').insert([{
-    patient_id: patientId,
-    content: message,
-    is_ai_response: false,
-    risk_score: riskLevel // Ensure this column exists in your DB
-}]);
-if (dbError) console.error("Supabase Save Error:", dbError.message);
+       // Insert user message with proper risk tracking
+        const { error: dbError } = await supabase.from('messages').insert([{
+            patient_id: patientId,
+            content: message,
+            is_ai_response: false,
+            flagged_reason: riskLevel === 'High' ? 'Suicide Risk' : null
+        }]);
+        
+        if (dbError) {
+            console.error("❌ Supabase Save Error (User Message):", dbError.message);
+            throw dbError;
+        }
 
         const chatSession = model.startChat({ 
             history: formattedHistory 
@@ -83,32 +88,80 @@ if (dbError) console.error("Supabase Save Error:", dbError.message);
         let availableDoctors = [];
         
         if (riskLevel === 'High') {
-            await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
-            const { data: docs } = await supabase.from('doctors').select('id, name, speciality, email').limit(5); 
-            availableDoctors = docs;
+            console.log('🚨 High-risk message detected, updating patient status and fetching doctors');
+            
+            // Update patient status to High
+            const { error: statusError } = await supabase
+                .from('patients')
+                .update({ status: 'High' })
+                .eq('id', patientId);
+            
+            if (statusError) {
+                console.error('❌ Failed to update patient status:', statusError.message);
+                throw statusError;
+            }
+            
+            console.log('✅ Patient status updated to High');
+            
+            // Fetch available doctors with proper error handling
+            const { data: docs, error: doctorsError } = await supabase
+                .from('doctors')
+                .select('id, name, speciality, gender, email')
+                .limit(5);
+            
+            if (doctorsError) {
+                console.error('❌ Failed to fetch doctors:', doctorsError.message);
+                // Don't throw error, continue with empty doctors list
+            } else {
+                availableDoctors = docs || [];
+                console.log(`✅ Fetched ${availableDoctors.length} available doctors`);
+            }
 
+            // Fix the patient query - remove invalid doctors relationship
             const { data: patientData } = await supabase
                 .from('patients')
-                .select('doctors(name, email)')
+                .select('assigned_doctor_id, first_name, last_name')
                 .eq('id', patientId)
                 .single();
 
-            if (patientData?.doctors?.email) {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
-                    to: patientData.doctors.email,
-                    subject: '🚨 URGENT: High-Risk Alert',
-                    html: `<h3>Emergency Alert</h3><p>Patient <b>${fName} ${lName}</b> sent a crisis message: "${message}"</p>`
-                });
+            // If patient has an assigned doctor, notify them
+            if (patientData?.assigned_doctor_id) {
+                const { data: assignedDoctor } = await supabase
+                    .from('doctors')
+                    .select('name, email')
+                    .eq('id', patientData.assigned_doctor_id)
+                    .single();
+                
+                if (assignedDoctor) {
+                    await transporter.sendMail({
+                        from: process.env.EMAIL_USER,
+                        to: assignedDoctor.email,
+                        subject: '🚨 URGENT: High-Risk Alert',
+                        html: `<h3>Emergency Alert</h3><p>Patient <b>${fName} ${lName}</b> sent a crisis message: "${message}"</p>`
+                    });
+                    console.log('📧 Email sent to assigned doctor:', assignedDoctor.email);
+                }
             }
         }
 
        
-        await supabase.from('messages').insert([{
+        // Insert AI response with proper role
+        const { error: aiResponseError } = await supabase.from('messages').insert([{
             patient_id: patientId,
             content: aiReply,
             is_ai_response: true
         }]);
+        
+        if (aiResponseError) {
+            console.error("❌ Supabase Save Error (AI Response):", aiResponseError.message);
+            // Don't throw error, continue with response
+        }
+
+        console.log('✅ Chat processed successfully:', { 
+            riskLevel, 
+            doctorsAvailable: availableDoctors.length,
+            messageLength: aiReply.length
+        });
 
         res.status(200).json({ 
             risk: riskLevel, 

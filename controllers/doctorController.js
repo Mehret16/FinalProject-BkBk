@@ -1,30 +1,51 @@
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 
-
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-
+const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export const getAllDoctors = async (req, res) => {
     try {
-        const supabase = getSupabase();
+        const supabaseAdmin = getSupabaseAdmin();
         
         console.log('🔍 Fetching doctors for user:', { userId: req.user.id, userRole: req.user.role });
         
-        const { data, error } = await supabase
+        // Fetch doctors and join with auth.users to ensure they have doctor role
+        const { data, error } = await supabaseAdmin
             .from('doctors')
-            .select('id, name, speciality, gender, email');
+            .select(`
+                id, 
+                name, 
+                speciality, 
+                gender, 
+                email,
+                auth_users!inner (
+                    user_metadata
+                )
+            `);
 
         if (error) {
             console.error('❌ Database error fetching doctors:', error.message);
             throw error;
         }
 
-        console.log('✅ Successfully fetched doctors:', { count: data?.length || 0 });
+        // Filter to only include users with doctor role in metadata
+        const doctorsWithRole = (data || []).filter(doctor => 
+            doctor.auth_users?.user_metadata?.role === 'doctor'
+        ).map(doctor => ({
+            id: doctor.id,
+            name: doctor.name,
+            speciality: doctor.speciality,
+            gender: doctor.gender,
+            email: doctor.email
+        }));
+
+        console.log('✅ Successfully fetched doctors:', { 
+            total: data?.length || 0, 
+            withDoctorRole: doctorsWithRole.length 
+        });
         
-        // Return empty array if no doctors found, not null
-        const doctors = data || [];
-        res.status(200).json(doctors);
+        res.status(200).json(doctorsWithRole);
     } catch (error) {
         console.error('❌ Error in getAllDoctors:', error.message);
         res.status(500).json({ error: "Failed to fetch doctors list" });
