@@ -11,6 +11,8 @@ const handleSignup = async (req, res, assignedRole) => {
     try {
         const { email, password, firstName, lastName, age, gender, country, adminKey } = req.body;
         
+        console.log('🔍 Signup Request:', { email, firstName, lastName, age, gender, country, assignedRole });
+        
         const supabase = getSupabase();
         const supabaseAdmin = getSupabaseAdmin();
 
@@ -18,6 +20,7 @@ const handleSignup = async (req, res, assignedRole) => {
         if (assignedRole === 'doctor') {
             const DOCTOR_SECRET = process.env.DOCTOR_SIGNUP_SECRET || 'MY_SUPER_SECRET_123'; 
             if (adminKey !== DOCTOR_SECRET) {
+                console.error('🚫 Invalid Doctor Secret Key:', { adminKey, DOCTOR_SECRET });
                 return res.status(403).json({ error: "Unauthorized: Invalid Doctor Secret Key." });
             }
         }
@@ -47,14 +50,14 @@ const handleSignup = async (req, res, assignedRole) => {
                 const { error } = await supabaseAdmin.from('patients').insert([{
                     id: data.user.id,        
                     email: email,
-                    role:'patient',
                     first_name: firstName,
                     last_name: lastName,
                     age: age,
                     gender: gender,
                     country: country,
                     assigned_doctor_id: null,
-                    status: "Normal" 
+                    status: "Normal",
+                    role: assignedRole
                     // 🛡️ REMOVED: password: password (NEVER store plain passwords here)
                 }]);
                 dbError = error;
@@ -62,8 +65,7 @@ const handleSignup = async (req, res, assignedRole) => {
                 const { error } = await supabaseAdmin.from('doctors').insert([{
                     id: data.user.id,
                     name: `${firstName} ${lastName}`,
-                    email: email,
-                    role: 'doctor',
+                    email: email
                 }]);
                 dbError = error;
             }
