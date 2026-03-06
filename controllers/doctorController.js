@@ -6,45 +6,29 @@ const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.en
 
 export const getAllDoctors = async (req, res) => {
     try {
-        const supabaseAdmin = getSupabaseAdmin();
+        const supabase = getSupabase();
         
         console.log('🔍 Fetching doctors for user:', { userId: req.user.id, userRole: req.user.role });
         
-        // Fetch doctors and join with auth.users to ensure they have doctor role
-        const { data, error } = await supabaseAdmin
+        // Query doctors table with correct column names
+        const { data, error } = await supabase
             .from('doctors')
-            .select(`
-                id, 
-                name, 
-                speciality, 
-                gender, 
-                email,
-                auth_users!inner (
-                    user_metadata
-                )
-            `);
+            .select('id, name, speciality, role, gender, email');
 
         if (error) {
             console.error('❌ Database error fetching doctors:', error.message);
             throw error;
         }
 
-        // Filter to only include users with doctor role in metadata
-        const doctorsWithRole = (data || []).filter(doctor => 
-            doctor.auth_users?.user_metadata?.role === 'doctor'
-        ).map(doctor => ({
-            id: doctor.id,
-            name: doctor.name,
-            speciality: doctor.speciality,
-            gender: doctor.gender,
-            email: doctor.email
-        }));
+        // Filter to only include doctors with role set to 'doctor'
+        const doctorsWithRole = (data || []).filter(doctor => doctor.role === 'doctor');
 
         console.log('✅ Successfully fetched doctors:', { 
             total: data?.length || 0, 
             withDoctorRole: doctorsWithRole.length 
         });
         
+        // Return empty array if no doctors found
         res.status(200).json(doctorsWithRole);
     } catch (error) {
         console.error('❌ Error in getAllDoctors:', error.message);

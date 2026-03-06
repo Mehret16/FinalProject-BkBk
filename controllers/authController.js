@@ -66,7 +66,8 @@ const handleSignup = async (req, res, assignedRole) => {
                     name: `${firstName} ${lastName}`,
                     email: email,
                     gender: gender,
-                    specialization: specialization
+                    speciality: specialization,
+                    role: assignedRole
                 }]);
                 dbError = error;
             }
