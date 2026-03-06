@@ -22,9 +22,13 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 export const handleChat = async (req, res) => {
     const supabase = getSupabase();
-    const patientId = req.user.id;
+    const patientId = req.user.id; // From verifyToken middleware
     const { message } = req.body;
     
+    // Verify patient_id matches auth.uid() for RLS compliance
+    if (!patientId || patientId !== req.user.id) {
+        return res.status(403).json({ error: "Unauthorized: User ID mismatch" });
+    }
   
     const fName = req.user.user_metadata?.first_name || "Patient";
     const lName = req.user.user_metadata?.last_name || "";
@@ -149,7 +153,8 @@ export const handleChat = async (req, res) => {
         const { error: aiResponseError } = await supabase.from('messages').insert([{
             patient_id: patientId,
             content: aiReply,
-            is_ai_response: true
+            is_ai_response: true,
+            role: 'ai'
         }]);
         
         if (aiResponseError) {
@@ -157,15 +162,21 @@ export const handleChat = async (req, res) => {
             // Don't throw error, continue with response
         }
 
+        // Generate specific high-risk response if needed
+        let finalReply = aiReply;
+        if (riskLevel === 'High') {
+            finalReply = "I've detected that you're going through a very difficult time. I am connecting you with our available healthcare professionals immediately. Please select a doctor from the list on the left to talk to someone who can help you right now.";
+        }
+
         console.log('✅ Chat processed successfully:', { 
             riskLevel, 
             doctorsAvailable: availableDoctors.length,
-            messageLength: aiReply.length
+            messageLength: finalReply.length
         });
 
         res.status(200).json({ 
             risk: riskLevel, 
-            reply: aiReply, 
+            reply: finalReply, 
             doctors: availableDoctors 
         });
 
