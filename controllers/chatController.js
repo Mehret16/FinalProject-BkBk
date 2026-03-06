@@ -25,9 +25,13 @@ export const handleChat = async (req, res) => {
     const patientId = req.user.id || req.user.userId; // Handle both id and userId from middleware
     const { message } = req.body;
     
-    // Remove strict ID check that causes 403 errors
+    // Validate required fields
     if (!patientId) {
         return res.status(403).json({ error: "Unauthorized: User ID not found" });
+    }
+    
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+        return res.status(400).json({ error: "Message is required and must be a non-empty string" });
     }
   
     const fName = req.user.user_metadata?.first_name || "Patient";
@@ -267,14 +271,19 @@ export const getChatHistory = async (req, res) => {
     try {
         const supabase = getSupabase();
         const userRole = req.user.user_metadata?.role;
-        const targetPatientId = req.params.patientId || req.user.userId; 
+        const targetPatientId = req.params.patientId || req.user.id || req.user.userId; 
+        
+        // Validate that we have a patient ID
+        if (!targetPatientId) {
+            return res.status(400).json({ error: "Patient ID is required" });
+        }
 
         if (userRole === 'doctor') {
             const { data: access } = await supabase
                 .from('patients')
                 .select('id')
                 .eq('id', targetPatientId)
-                .eq('assigned_doctor_id', req.user.userId) 
+                .eq('assigned_doctor_id', req.user.id || req.user.userId) 
                 .eq('status', 'High') 
                 .single();
 
