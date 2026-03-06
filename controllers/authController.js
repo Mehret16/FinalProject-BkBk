@@ -43,12 +43,12 @@ const handleSignup = async (req, res, assignedRole) => {
 
         // 4. Insert Profile into Public Tables
         if (data.user) {
-            await delay(500); 
+            await delay(1000); // Increased delay to ensure Auth record is propagated
             let dbError = null;
 
             if (assignedRole === 'patient') {
-                const { error } = await supabaseAdmin.from('patients').insert([{
-                    id: data.user.id,
+                const patientData = {
+                    id: data.user.id, // Use EXACT id from signup response
                     first_name: firstName,
                     last_name: lastName,
                     email: email,
@@ -58,25 +58,42 @@ const handleSignup = async (req, res, assignedRole) => {
                     country: country,
                     assigned_doctor_id: null,
                     status: "Normal"
-                }]);
+                };
+                
+                console.log('🔍 Inserting patient data:', patientData);
+                
+                const { error } = await supabaseAdmin.from('patients').insert([patientData]);
                 dbError = error;
             } else if (assignedRole === 'doctor') {
-                const { error } = await supabaseAdmin.from('doctors').insert([{
-                    id: data.user.id,
+                const doctorData = {
+                    id: data.user.id, // Use EXACT id from signup response
                     name: `${firstName} ${lastName}`,
                     email: email,
                     gender: gender,
                     speciality: specialization,
                     role: assignedRole
-                }]);
+                };
+                
+                console.log('🔍 Inserting doctor data:', doctorData);
+                
+                const { error } = await supabaseAdmin.from('doctors').insert([doctorData]);
                 dbError = error;
             }
 
             if (dbError) {
                 console.error(`❌ ${assignedRole} Table Insert Error:`, dbError.message);
+                console.error('❌ Full Error Details:', dbError.details || 'No details available');
+                console.error('❌ Error Code:', dbError.code || 'No code available');
+                
                 // Rollback: Delete the auth user if profile creation fails
                 await supabaseAdmin.auth.admin.deleteUser(data.user.id);
-                return res.status(500).json({ error: "Profile creation failed. Please try again." });
+                
+                // Return detailed error message to frontend
+                return res.status(500).json({ 
+                    error: "Profile creation failed. Please try again.",
+                    details: dbError.details || dbError.message,
+                    code: dbError.code || 'UNKNOWN'
+                });
             }
         }
 
