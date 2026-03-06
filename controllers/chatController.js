@@ -5,6 +5,7 @@ import 'dotenv/config';
 
 
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 
 const transporter = nodemailer.createTransport({
@@ -21,7 +22,7 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 
 export const handleChat = async (req, res) => {
-    const supabase = getSupabase();
+    const supabase = getSupabaseAdmin(); // Use admin client to bypass RLS
     const patientId = req.user.id || req.user.userId; // Handle both id and userId from middleware
     const { message } = req.body;
     
