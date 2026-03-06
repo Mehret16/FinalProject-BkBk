@@ -22,11 +22,11 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 export const handleChat = async (req, res) => {
     const supabase = getSupabase();
-    const patientId = req.user.id; // From verifyToken middleware
+    const patientId = req.user.userId; // From verifyToken middleware - use consistent userId
     const { message } = req.body;
     
     // Verify patient_id matches auth.uid() for RLS compliance
-    if (!patientId || patientId !== req.user.id) {
+    if (!patientId || patientId !== req.user.userId) {
         return res.status(403).json({ error: "Unauthorized: User ID mismatch" });
     }
   
@@ -88,12 +88,13 @@ export const handleChat = async (req, res) => {
         }
 
     
-       // Insert user message with proper error handling
+       // Insert user message with all required fields
         try {
             const { error: dbError } = await supabase.from('messages').insert([{
-                patient_id: req.user.userId,
+                patient_id: patientId, // Use consistent patientId variable
                 content: message,
-                role: 'user'
+                role: 'user',
+                is_ai_response: false
             }]);
             
             if (dbError) {
@@ -105,28 +106,40 @@ export const handleChat = async (req, res) => {
             return res.status(400).json({ error: insertError.message });
         }
 
-        const chatSession = model.startChat({ 
-            history: formattedHistory 
-        });
+        // Dual-Path Logic: Crisis vs Normal Counseling
+        let aiReply = '';
+        let finalReply = '';
+        let redirectToDoctor = false;
+        
+        if (isCrisis) {
+            // Path B: Crisis - Don't call Gemini, use predefined response
+            finalReply = "I'm concerned about your safety. I am a chatbot, and you need professional help. Please choose a doctor from the list on your dashboard immediately.";
+            redirectToDoctor = true;
+            console.log('🚨 Crisis path: Using predefined crisis response');
+        } else {
+            // Path A: Normal Counseling - Call Gemini API
+            const chatSession = model.startChat({ 
+                history: formattedHistory 
+            });
 
-     
-        const combinedPrompt = `System Context: ${websiteContext}\n\nUser Message: ${message}`;
-        
-        const result = await chatSession.sendMessage(combinedPrompt);
-        const aiReply = result.response.text();
-
-        
-        let availableDoctors = [];
-        
-        if (riskLevel === 'High') {
-            console.log('🚨 High-risk message detected, updating patient status and fetching doctors');
+            const combinedPrompt = `System Context: ${websiteContext}\n\nUser Message: ${message}`;
             
-            // Update patient status to High and flagged_reason to crisis
+            const result = await chatSession.sendMessage(combinedPrompt);
+            aiReply = result.response.text();
+            finalReply = aiReply;
+            console.log('💬 Normal path: Using Gemini counseling response');
+        }
+
+        // Remove duplicate status update - already handled in crisis detection above
+        if (riskLevel === 'High' && !isCrisis) {
+            console.log('⚠️ High-risk (non-crisis) message detected, updating patient status and fetching doctors');
+            
+            // Update patient status to High and flagged_reason to high_risk
             const { error: statusError } = await supabase
                 .from('patients')
                 .update({ 
                     status: 'High',
-                    flagged_reason: 'crisis'
+                    flagged_reason: 'high_risk'
                 })
                 .eq('id', patientId);
             
@@ -135,9 +148,13 @@ export const handleChat = async (req, res) => {
                 throw statusError;
             }
             
-            console.log('✅ Patient status updated to High with flagged_reason: crisis');
-            
-            // Fetch available doctors with proper error handling
+            console.log('✅ Patient status updated to High with flagged_reason: high_risk');
+        }
+        
+        // Fetch available doctors if risk level is high
+        let availableDoctors = [];
+        
+        if (riskLevel === 'High') {
             const { data: docs, error: doctorsError } = await supabase
                 .from('doctors')
                 .select('id, name, speciality, gender, email')
@@ -179,10 +196,10 @@ export const handleChat = async (req, res) => {
         }
 
        
-        // Insert AI response with proper role
+        // Insert AI response with all required fields
         const { error: aiResponseError } = await supabase.from('messages').insert([{
-            patient_id: req.user.userId, // Use req.user.userId for RLS
-            content: aiReply,
+            patient_id: patientId, // Use consistent patientId variable
+            content: finalReply, // Use finalReply (contains either AI response or crisis message)
             is_ai_response: true,
             role: 'ai'
         }]);
@@ -190,18 +207,6 @@ export const handleChat = async (req, res) => {
         if (aiResponseError) {
             console.error("❌ Supabase Save Error (AI Response):", aiResponseError.message);
             // Don't throw error, continue with response
-        }
-
-        // Generate specific crisis response if needed
-        let finalReply = aiReply;
-        let redirectToDoctor = false;
-        
-        if (isCrisis) {
-            finalReply = "I am concerned about your safety. Please reach out to one of the doctors listed on your dashboard immediately.";
-            redirectToDoctor = true;
-        } else if (riskLevel === 'High') {
-            finalReply = "I've detected that you're going through a very difficult time. I am connecting you with our available healthcare professionals immediately. Please select a doctor from the list below for immediate help.";
-            redirectToDoctor = true;
         }
 
         console.log('✅ Chat processed successfully:', { 
@@ -262,14 +267,14 @@ export const getChatHistory = async (req, res) => {
     try {
         const supabase = getSupabase();
         const userRole = req.user.user_metadata?.role;
-        const targetPatientId = req.params.patientId || req.user.id; 
+        const targetPatientId = req.params.patientId || req.user.userId; 
 
         if (userRole === 'doctor') {
             const { data: access } = await supabase
                 .from('patients')
                 .select('id')
                 .eq('id', targetPatientId)
-                .eq('assigned_doctor_id', req.user.id) 
+                .eq('assigned_doctor_id', req.user.userId) 
                 .eq('status', 'High') 
                 .single();
 
