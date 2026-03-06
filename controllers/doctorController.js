@@ -8,15 +8,26 @@ const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUP
 export const getAllDoctors = async (req, res) => {
     try {
         const supabase = getSupabase();
-     
+        
+        console.log('🔍 Fetching doctors for user:', { userId: req.user.id, userRole: req.user.role });
+        
         const { data, error } = await supabase
             .from('doctors')
-            .select('id, name, specialization, gender');
+            .select('id, name, speciality, gender, email');
 
-        if (error) throw error;
-        res.status(200).json(data);
+        if (error) {
+            console.error('❌ Database error fetching doctors:', error.message);
+            throw error;
+        }
+
+        console.log('✅ Successfully fetched doctors:', { count: data?.length || 0 });
+        
+        // Return empty array if no doctors found, not null
+        const doctors = data || [];
+        res.status(200).json(doctors);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('❌ Error in getAllDoctors:', error.message);
+        res.status(500).json({ error: "Failed to fetch doctors list" });
     }
 };
 
@@ -41,16 +52,28 @@ export const assignDoctor = async (req, res) => {
 export const getHighRiskPatients = async (req, res) => {
     try {
         const supabase = getSupabase();
+        
+        console.log('🔍 Fetching high-risk patients for doctor:', { doctorId: req.user.id });
+        
         const { data, error } = await supabase
             .from('patients')
-            .select('id, name, email, status') 
+            .select('id, first_name, last_name, email, status') 
             .eq('assigned_doctor_id', req.user.id)
             .eq('status', 'High');
 
-        if (error) throw error;
-        res.status(200).json(data);
+        if (error) {
+            console.error('❌ Database error fetching high-risk patients:', error.message);
+            throw error;
+        }
+
+        console.log('✅ Successfully fetched high-risk patients:', { count: data?.length || 0 });
+        
+        // Return empty array if no patients found
+        const patients = data || [];
+        res.status(200).json(patients);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('❌ Error in getHighRiskPatients:', error.message);
+        res.status(500).json({ error: "Failed to fetch high-risk patients" });
     }
 };
 

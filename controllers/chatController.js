@@ -84,7 +84,7 @@ if (dbError) console.error("Supabase Save Error:", dbError.message);
         
         if (riskLevel === 'High') {
             await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
-            const { data: docs } = await supabase.from('doctors').select('id, name, specialization, email').limit(5); 
+            const { data: docs } = await supabase.from('doctors').select('id, name, speciality, email').limit(5); 
             availableDoctors = docs;
 
             const { data: patientData } = await supabase
