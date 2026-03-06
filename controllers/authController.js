@@ -9,9 +9,9 @@ const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
 const handleSignup = async (req, res, assignedRole) => {
     try {
-        const { email, password, firstName, lastName, age, gender, country, adminKey } = req.body;
+        const { email, password, firstName, lastName, age, gender, country, adminKey, specialization } = req.body;
         
-        console.log('🔍 Signup Request:', { email, firstName, lastName, age, gender, country, assignedRole });
+        console.log('🔍 Signup Request:', { email, firstName, lastName, age, gender, country, assignedRole, specialization });
         
         const supabase = getSupabase();
         const supabaseAdmin = getSupabaseAdmin();
@@ -48,24 +48,25 @@ const handleSignup = async (req, res, assignedRole) => {
 
             if (assignedRole === 'patient') {
                 const { error } = await supabaseAdmin.from('patients').insert([{
-                    id: data.user.id,        
-                    email: email,
+                    id: data.user.id,
                     first_name: firstName,
                     last_name: lastName,
+                    email: email,
+                    role: assignedRole,
                     age: age,
                     gender: gender,
                     country: country,
                     assigned_doctor_id: null,
-                    status: "Normal",
-                    role: assignedRole
-                    // 🛡️ REMOVED: password: password (NEVER store plain passwords here)
+                    status: "Normal"
                 }]);
                 dbError = error;
             } else if (assignedRole === 'doctor') {
                 const { error } = await supabaseAdmin.from('doctors').insert([{
                     id: data.user.id,
                     name: `${firstName} ${lastName}`,
-                    email: email
+                    email: email,
+                    gender: gender,
+                    specialization: specialization
                 }]);
                 dbError = error;
             }
