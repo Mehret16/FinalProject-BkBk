@@ -41,9 +41,11 @@ const handleSignup = async (req, res, assignedRole) => {
 
         if (error) return res.status(400).json({ error: error.message });
 
+        // 4. WAIT for Auth user to propagate
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
         // 4. Insert Profile into Public Tables
         if (data.user) {
-            await delay(1000); // Increased delay to ensure Auth record is propagated
             let dbError = null;
 
             if (assignedRole === 'patient') {
@@ -62,7 +64,9 @@ const handleSignup = async (req, res, assignedRole) => {
                 
                 console.log('🔍 Inserting patient data:', patientData);
                 
-                const { error } = await supabaseAdmin.from('patients').insert([patientData]);
+                const { error } = await supabaseAdmin.from('patients').upsert([patientData], {
+                    onConflict: 'id'
+                });
                 dbError = error;
             } else if (assignedRole === 'doctor') {
                 const doctorData = {
@@ -76,7 +80,9 @@ const handleSignup = async (req, res, assignedRole) => {
                 
                 console.log('🔍 Inserting doctor data:', doctorData);
                 
-                const { error } = await supabaseAdmin.from('doctors').insert([doctorData]);
+                const { error } = await supabaseAdmin.from('doctors').upsert([doctorData], {
+                    onConflict: 'id'
+                });
                 dbError = error;
             }
 

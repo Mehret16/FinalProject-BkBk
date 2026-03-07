@@ -139,7 +139,7 @@ export const handleChat = async (req, res) => {
         
         if (isCrisis) {
             // Path B: Crisis - Don't call Gemini, use predefined response
-            finalReply = "I'm concerned about your safety. I am a chatbot, and you need professional help. Please choose a doctor from the list on your dashboard immediately.";
+            finalReply = "Please select a doctor from list for immediate professional help.";
             redirectToDoctor = true;
             console.log('🚨 Crisis path: Using predefined crisis response');
         } else {
