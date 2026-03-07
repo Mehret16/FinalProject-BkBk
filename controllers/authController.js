@@ -8,10 +8,11 @@ const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.en
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
 const handleSignup = async (req, res, assignedRole) => {
+    console.log('Incoming Body:', req.body);
     try {
         const { email, password, firstName, lastName, age, gender, country, adminKey, specialization } = req.body;
         
-        console.log('🔍 Signup Request:', { email, firstName, lastName, age, gender, country, assignedRole, specialization });
+        console.log(' Signup Request:', { email, firstName, lastName, age, gender, country, assignedRole, specialization });
         
         const supabase = getSupabase();
         const supabaseAdmin = getSupabaseAdmin();
@@ -20,13 +21,13 @@ const handleSignup = async (req, res, assignedRole) => {
         if (assignedRole === 'doctor') {
             const DOCTOR_SECRET = process.env.DOCTOR_SIGNUP_SECRET || 'MY_SUPER_SECRET_123'; 
             if (adminKey !== DOCTOR_SECRET) {
-                console.error('🚫 Invalid Doctor Secret Key:', { adminKey, DOCTOR_SECRET });
+                console.error(' Invalid Doctor Secret Key:', { adminKey, DOCTOR_SECRET });
                 return res.status(403).json({ error: "Unauthorized: Invalid Doctor Secret Key." });
             }
         }
 
         // 3. SUPABASE AUTH SIGNUP 
-        // 🛡️ Supabase hashes the password automatically. No bcrypt needed.
+        //  Supabase hashes the password automatically. No bcrypt needed.
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -62,12 +63,17 @@ const handleSignup = async (req, res, assignedRole) => {
                     status: "Normal"
                 };
                 
-                console.log('🔍 Inserting patient data:', patientData);
+                console.log(' Inserting patient data:', patientData);
                 
-                const { error } = await supabaseAdmin.from('patients').upsert([patientData], {
-                    onConflict: 'id'
-                });
-                dbError = error;
+                try {
+                    const { error } = await supabaseAdmin.from('patients').upsert([patientData], {
+                        onConflict: 'id'
+                    });
+                    dbError = error;
+                } catch (insertError) {
+                    console.error(' Patient Insert Exception:', insertError.message);
+                    return res.status(400).json({ error: insertError.message });
+                }
             } else if (assignedRole === 'doctor') {
                 const doctorData = {
                     id: data.user.id, // Use EXACT id from signup response
@@ -78,18 +84,22 @@ const handleSignup = async (req, res, assignedRole) => {
                     role: assignedRole
                 };
                 
-                console.log('🔍 Inserting doctor data:', doctorData);
+                console.log(' Inserting doctor data:', doctorData);
                 
-                const { error } = await supabaseAdmin.from('doctors').upsert([doctorData], {
-                    onConflict: 'id'
-                });
-                dbError = error;
+                try {
+                    const { error } = await supabaseAdmin.from('doctors').upsert([doctorData], {
+                        onConflict: 'id'
+                    });
+                    dbError = error;
+                } catch (insertError) {
+                    console.error(' Doctor Insert Exception:', insertError.message);
+                    return res.status(400).json({ error: insertError.message });
+                }
             }
 
             if (dbError) {
-                console.error(`❌ ${assignedRole} Table Insert Error:`, dbError.message);
-                console.error('❌ Full Error Details:', dbError.details || 'No details available');
-                console.error('❌ Error Code:', dbError.code || 'No code available');
+                console.error(` ${assignedRole} Table Insert Error:`, dbError.message);
+                console.error(' Full Error Details:', dbError.details || 'No details available');
                 
                 // Rollback: Delete the auth user if profile creation fails
                 await supabaseAdmin.auth.admin.deleteUser(data.user.id);
