@@ -7,7 +7,7 @@ import chatRoutes from './routes/chatRoutes.js';
 
 const app = express();
 app.use(cors({
-   origin:[ 'https://safespace-one.vercel.app/','http://localhost:5174','http://localhost:3000','http://localhost:5175',  
+   origin:[ 'https://safespace-one.vercel.app','http://localhost:5174','http://localhost:3000','http://localhost:5175',  
      'http://localhost:5173',   
      'http://localhost:3000'],
     credentials: true,
