@@ -62,7 +62,7 @@ export const handleChat = async (req, res) => {
             parts: [{ text: msg.content }],
         })) : [];
 
-  const highRiskKeywords = /\b(kill|suicide|die|end it all|ራስን ማጥፋት|መሞት|ሞት)\b/i;
+  const highRiskKeywords = /\b(kill|suicide|self-harm|ራስን ማጥፋት)\b/i;
         let riskLevel = 'Low';
         let isCrisis = false;
         let isHighRisk = false;
@@ -80,7 +80,7 @@ export const handleChat = async (req, res) => {
                 .from('patients')
                 .update({ 
                     status: 'High',
-                    flagged_reason: 'Suicide Risk'
+                    flagged_reason: 'Crisis Detected'
                 })
                 .eq('id', patientId);
             
@@ -88,13 +88,34 @@ export const handleChat = async (req, res) => {
                 console.error('❌ Failed to update patient status:', statusError.message);
                 // Don't throw error, continue with crisis response
             } else {
-                console.log('✅ Patient status updated to High with flagged_reason: Suicide Risk');
+                console.log('✅ Patient status updated to High with flagged_reason: Crisis Detected');
             }
         }
 
     
-       // Insert user message with all required fields
+       // Ensure patient profile exists before inserting messages
         try {
+            // First, upsert patient profile to ensure it exists
+            const { error: upsertError } = await supabase
+                .from('patients')
+                .upsert({
+                    id: patientId,
+                    email: req.user.email || req.user.user_metadata?.email,
+                    first_name: req.user.user_metadata?.first_name || req.user.user_metadata?.name?.split(' ')[0] || 'Unknown',
+                    last_name: req.user.user_metadata?.last_name || req.user.user_metadata?.name?.split(' ').slice(1).join(' ') || '',
+                    status: 'Normal'
+                }, {
+                    onConflict: 'id'
+                });
+
+            if (upsertError) {
+                console.error('❌ Failed to upsert patient profile:', upsertError.message);
+                // Continue with message insert anyway
+            } else {
+                console.log('✅ Patient profile ensured for:', patientId);
+            }
+
+            // Insert user message with all required fields
             const { error: dbError } = await supabase.from('messages').insert([{
                 patient_id: patientId, // Use consistent patientId variable
                 content: message,
@@ -280,15 +301,15 @@ export const getChatHistory = async (req, res) => {
         }
 
         if (userRole === 'doctor') {
+            // Allow access to ANY high-risk patient, not just assigned ones
             const { data: access } = await supabase
                 .from('patients')
                 .select('id')
                 .eq('id', targetPatientId)
-                .eq('assigned_doctor_id', req.user.id || req.user.userId) 
                 .eq('status', 'High') 
                 .single();
 
-            if (!access) return res.status(403).json({ error: "Access denied." });
+            if (!access) return res.status(403).json({ error: "Access denied. Patient must be high-risk status." });
         }
 
         const { data, error } = await supabase

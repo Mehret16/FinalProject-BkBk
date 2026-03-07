@@ -58,13 +58,14 @@ export const getHighRiskPatients = async (req, res) => {
     try {
         const supabase = getSupabase();
         
-        console.log('🔍 Fetching high-risk patients for doctor:', { doctorId: req.user.id });
+        console.log('🔍 Fetching ALL high-risk patients for doctor:', { doctorId: req.user.id });
         
+        // Return ALL patients with status === 'High', not just assigned ones
         const { data, error } = await supabase
             .from('patients')
-            .select('id, first_name, last_name, email, status') 
-            .eq('assigned_doctor_id', req.user.id)
-            .eq('status', 'High');
+            .select('id, first_name, last_name, email, status, flagged_reason, created_at') 
+            .eq('status', 'High')
+            .order('created_at', { ascending: false });
 
         if (error) {
             console.error('❌ Database error fetching high-risk patients:', error.message);
@@ -104,13 +105,14 @@ export const updatePatientStatus = async (req, res) => {
 export const doctorReply = async (req, res) => {
     try {
         const { patientId, message } = req.body;
-        const supabase = getSupabase();
+        const supabase = getSupabaseAdmin(); // Use admin client to bypass RLS
 
         const { error } = await supabase
             .from('messages')
             .insert([{
                 patient_id: patientId,
                 content: message,
+                role: 'user', // Doctor messages are from user perspective
                 is_ai_response: false 
             }]);
 
