@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 
 export const handleChat = async (req, res) => {
@@ -138,16 +138,23 @@ export const handleChat = async (req, res) => {
             console.log('🚨 Crisis path: Using predefined crisis response');
         } else {
             // Path A: Normal Counseling - Call Gemini API
-            const chatSession = model.startChat({ 
-                history: formattedHistory 
-            });
+            try {
+                const chatSession = model.startChat({ 
+                    history: formattedHistory 
+                });
 
-            const combinedPrompt = `System Context: ${websiteContext}\n\nUser Message: ${message}`;
-            
-            const result = await chatSession.sendMessage(combinedPrompt);
-            aiReply = result.response.text();
-            finalReply = aiReply;
-            console.log('💬 Normal path: Using Gemini counseling response');
+                const combinedPrompt = `System Context: ${websiteContext}\n\nUser Message: ${message}`;
+                
+                const result = await chatSession.sendMessage(combinedPrompt);
+                aiReply = result.response.text();
+                finalReply = aiReply;
+                console.log('💬 Normal path: Using Gemini counseling response');
+            } catch (geminiError) {
+                console.error('❌ Gemini API Error:', geminiError.message);
+                // Friendly fallback message for API failures
+                finalReply = "I'm having a little trouble connecting right now, but I've noted your message. Please try again in a moment or contact a doctor directly if it is urgent.";
+                console.log('🔄 Using fallback response due to Gemini failure');
+            }
         }
 
         // Remove duplicate status update - already handled in crisis detection above
