@@ -32,6 +32,7 @@ export const getAllDoctors = async (req, res) => {
         res.status(200).json(doctorsWithRole);
     } catch (error) {
         console.error('❌ Error in getAllDoctors:', error.message);
+        console.dir(error); // Add full error object inspection
         res.status(500).json({ error: "Failed to fetch doctors list" });
     }
 };

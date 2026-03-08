@@ -72,6 +72,7 @@ const handleSignup = async (req, res, assignedRole) => {
                     dbError = error;
                 } catch (insertError) {
                     console.error(' Patient Insert Exception:', insertError.message);
+                    console.dir(insertError); 
                     return res.status(400).json({ error: insertError.message });
                 }
             } else if (assignedRole === 'doctor') {
@@ -93,6 +94,7 @@ const handleSignup = async (req, res, assignedRole) => {
                     dbError = error;
                 } catch (insertError) {
                     console.error(' Doctor Insert Exception:', insertError.message);
+                    console.dir(insertError); 
                     return res.status(400).json({ error: insertError.message });
                 }
             }
@@ -100,6 +102,7 @@ const handleSignup = async (req, res, assignedRole) => {
             if (dbError) {
                 console.error(` ${assignedRole} Table Insert Error:`, dbError.message);
                 console.error(' Full Error Details:', dbError.details || 'No details available');
+                console.dir(dbError); 
                 
                 // Rollback: Delete the auth user if profile creation fails
                 await supabaseAdmin.auth.admin.deleteUser(data.user.id);
