@@ -93,33 +93,27 @@ export const handleChat = async (req, res) => {
         }
 
     
-       // Ensure patient profile exists before inserting messages
+        // Verify patient exists before inserting messages
         try {
-            // First, upsert patient profile to ensure it exists
-            const { error: upsertError } = await supabase
+            // Check if patient exists in database
+            const { data: patient, error: patientError } = await supabase
                 .from('patients')
-                .upsert({
-                    id: patientId,
-                    email: req.user.email || req.user.user_metadata?.email,
-                    first_name: req.user.user_metadata?.first_name || req.user.user_metadata?.name?.split(' ')[0] || 'Unknown',
-                    last_name: req.user.user_metadata?.last_name || req.user.user_metadata?.name?.split(' ').slice(1).join(' ') || '',
-                    status: 'Normal'
-                }, {
-                    onConflict: 'id'
-                });
+                .select('id')
+                .eq('id', patientId)
+                .single();
 
-            if (upsertError) {
-                console.error('❌ Failed to upsert patient profile:', upsertError.message);
-                // Continue with message insert anyway
-            } else {
-                console.log('✅ Patient profile ensured for:', patientId);
+            if (patientError || !patient) {
+                console.error('❌ Patient not found in database:', { patientId, error: patientError?.message });
+                return res.status(404).json({ error: "Patient profile not found. Please ensure you are properly registered." });
             }
+
+            console.log('✅ Patient verified:', patientId);
 
             // Insert user message with all required fields
             const { error: dbError } = await supabase.from('messages').insert([{
                 patient_id: patientId, // Use consistent patientId variable
                 content: message,
-                role: 'user',
+                role: 'patient', // Changed from 'user' to 'patient' to match DB schema
                 is_ai_response: false
             }]);
             
@@ -253,7 +247,8 @@ export const handleChat = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("--- GOOGLE API ERROR ---", err.message);
+        console.error("--- CHAT PROCESSING ERROR ---", err.message);
+        console.error("--- ERROR STACK ---", err.stack);
 
         if (err.message.includes('429')) {
             return res.status(429).json({ 
@@ -261,7 +256,10 @@ export const handleChat = async (req, res) => {
             });
         }
         
-        res.status(500).json({ error: "Failed to process chat" });
+        res.status(500).json({ 
+            error: err.message, 
+            stack: err.stack 
+        });
     }
 };
 
