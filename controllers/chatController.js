@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 
 export const handleChat = async (req, res) => {
@@ -144,8 +144,11 @@ export const handleChat = async (req, res) => {
                 });
 
                 const combinedPrompt = `System Context: ${websiteContext}\n\nUser Message: ${message}`;
+                console.log('DEBUG: Prompt sent to Gemini:', combinedPrompt);
                 
                 const result = await chatSession.sendMessage(combinedPrompt);
+                console.log('DEBUG: Raw Gemini Response:', JSON.stringify(result.response));
+                
                 aiReply = result.response.text();
                 finalReply = aiReply;
                 console.log('💬 Normal path: Using Gemini counseling response');
@@ -154,6 +157,12 @@ export const handleChat = async (req, res) => {
                 // Friendly fallback message for API failures
                 finalReply = "I'm having a little trouble connecting right now, but I've noted your message. Please try again in a moment or contact a doctor directly if it is urgent.";
                 console.log('🔄 Using fallback response due to Gemini failure');
+            }
+            
+            // Additional fallback for empty responses
+            if (!finalReply || finalReply.trim() === '') {
+                console.log('⚠️ Empty response detected, using fallback');
+                finalReply = 'I received your message, but I\'m having trouble generating a response. How else can I help?';
             }
         }
 
