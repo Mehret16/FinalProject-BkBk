@@ -8,11 +8,16 @@ const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.en
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
 const handleSignup = async (req, res, assignedRole) => {
+    console.log(' Request URL:', req.originalUrl);
     console.log('Incoming Body:', req.body);
     try {
-        const { email, password, firstName, lastName, age, gender, country, adminKey, specialization } = req.body;
+        const { email, password, firstName, FirstName, lastName, LastName, age, gender, country, adminKey, specialization } = req.body;
         
-        console.log(' Signup Request:', { email, firstName, lastName, age, gender, country, assignedRole, specialization });
+        // Handle potential casing mismatches from frontend
+        const finalFirstName = firstName || FirstName || 'Unknown';
+        const finalLastName = lastName || LastName || '';
+        
+        console.log(' Signup Request:', { email, firstName: finalFirstName, lastName: finalLastName, age, gender, country, assignedRole, specialization });
         
         const supabase = getSupabase();
         const supabaseAdmin = getSupabaseAdmin();
@@ -33,8 +38,8 @@ const handleSignup = async (req, res, assignedRole) => {
             password,
             options: {
                 data: { 
-                    first_name: firstName, 
-                    last_name: lastName, 
+                    first_name: finalFirstName, 
+                    last_name: finalLastName, 
                     role: assignedRole 
                 }
             }
@@ -52,8 +57,8 @@ const handleSignup = async (req, res, assignedRole) => {
             if (assignedRole === 'patient') {
                 const patientData = {
                     id: data.user.id, // Use EXACT id from signup response
-                    first_name: firstName,
-                    last_name: lastName,
+                    first_name: finalFirstName,
+                    last_name: finalLastName,
                     email: email,
                     role: assignedRole,
                     age: age,
@@ -78,7 +83,7 @@ const handleSignup = async (req, res, assignedRole) => {
             } else if (assignedRole === 'doctor') {
                 const doctorData = {
                     id: data.user.id, // Use EXACT id from signup response
-                    name: `${firstName} ${lastName}`,
+                    name: `${finalFirstName} ${finalLastName}`,
                     email: email,
                     gender: gender,
                     speciality: specialization,
