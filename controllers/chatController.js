@@ -18,7 +18,16 @@ const transporter = nodemailer.createTransport({
 
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-flash",
+    systemInstruction: "You are a specialized Mental Health Assistant. Focus strictly on mental health support. If user is in distress, encourage professional help.",
+    safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+    ]
+});
 
 
 export const handleChat = async (req, res) => {
@@ -59,40 +68,26 @@ export const handleChat = async (req, res) => {
 
         const formattedHistory = history ? history.reverse().map(msg => ({
             role: msg.is_ai_response ? "model" : "user",
-            parts: [{ text: msg.content }],
+            parts: [{ text: msg.content }]
         })) : [];
 
   const highRiskKeywords = /\b(kill|suicide|self-harm|ራስን ማጥፋት)\b/i;
+        const immediateCrisisKeywords = /\b(suicide|self-harm|kill myself|end my life)\b/i;
         let riskLevel = 'Low';
         let isCrisis = false;
         let isHighRisk = false;
-       
-        // Crisis Detection BEFORE calling Gemini API
-        if (highRiskKeywords.test(message)) {
+        
+        // Immediate Crisis Detection - Local check first
+        if (immediateCrisisKeywords.test(message)) {
             riskLevel = 'High';
             isCrisis = true;
             isHighRisk = true;
-            
-            console.log('🚨 Crisis detected, updating patient status immediately');
-            
-            // Update patient status to High
-            const { error: statusError } = await supabase
-                .from('patients')
-                .update({ 
-                    status: 'High',
-                    flagged_reason: 'Crisis Detected'
-                })
-                .eq('id', patientId);
-            
-            if (statusError) {
-                console.error('❌ Failed to update patient status:', statusError.message);
-                // Don't throw error, continue with crisis response
-            } else {
-                console.log('✅ Patient status updated to High with flagged_reason: Crisis Detected');
-            }
-        }
-
-    
+            console.log('🚨 Immediate crisis detected via local keywords');
+        } else if (highRiskKeywords.test(message)) {
+            riskLevel = 'High';
+            isHighRisk = true;
+            console.log('⚠️ High-risk content detected');
+        }    
         // Verify patient exists before inserting messages
         try {
             // Check if patient exists in database
@@ -154,6 +149,7 @@ export const handleChat = async (req, res) => {
                 console.log('💬 Normal path: Using Gemini counseling response');
             } catch (geminiError) {
                 console.error('❌ Gemini API Error:', geminiError.message);
+                console.error('Full Gemini Error:', geminiError);
                 // Friendly fallback message for API failures
                 finalReply = "I'm having a little trouble connecting right now, but I've noted your message. Please try again in a moment or contact a doctor directly if it is urgent.";
                 console.log('🔄 Using fallback response due to Gemini failure');
@@ -254,12 +250,11 @@ export const handleChat = async (req, res) => {
         });
 
         res.status(200).json({ 
-            risk: riskLevel, 
             reply: finalReply, 
-            doctors: availableDoctors,
             isCrisis: isCrisis, 
-            isHighRisk: isHighRisk, 
-            redirectToDoctor: redirectToDoctor
+            risk: riskLevel, 
+            redirectToDoctor: isCrisis,
+            doctors: availableDoctors || []
         });
 
     } catch (err) {
