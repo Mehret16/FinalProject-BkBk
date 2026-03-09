@@ -3,11 +3,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import nodemailer from 'nodemailer';
 import 'dotenv/config';
 
-
+// 1. Initialize Supabase
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-
+// 2. Setup Nodemailer
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { 
@@ -16,202 +15,119 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-
+// 3. Setup Gemini AI (Gemini 2.5 Flash-Lite for 2026 stability)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel(
-    { 
-        model: "gemini-1.5-flash",
-        systemInstruction: "You are a specialized Mental Health Assistant for 'SafeSpace'. Focus strictly on mental health, stress, and wellness. If high risk is detected, escalate to a doctor. Match the user's language (English or Amharic). You are the AI assistant for SafeSpace. Provide empathetic support and guide users to professional doctors. SCOPE: ONLY discuss mental health, stress, anxiety, and wellness. LANGUAGE: Always match the user's language (English or Amharic). ONLY use the resources provided in this chat. DO NOT mention international hotlines, external websites, or groups like LGBTQ helpers. If the user is in high risk, ONLY say that a local doctor from SafeSpace has been notified. Stay focused ONLY on the local medical intervention provided by this platform.",
-        safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
-    }, 
-    { apiVersion: 'v1' } // Explicitly force stable v1
-);
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash-lite",
+    safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+    ]
+});
 
-
+/**
+ * 1. HANDLE CHAT (Main Logic)
+ */
 export const handleChat = async (req, res) => {
-    const supabase = getSupabaseAdmin(); // Use admin client to bypass RLS
-    const patientId = req.user.id || req.user.userId; // Handle both id and userId from middleware
+    const supabase = getSupabase();
+    const patientId = req.user.id;
     const { message } = req.body;
     
-    // Validate required fields
-    if (!patientId) {
-        return res.status(403).json({ error: "Unauthorized: User ID not found" });
-    }
-    
-    if (!message || typeof message !== 'string' || message.trim() === '') {
-        return res.status(400).json({ error: "Message is required and must be a non-empty string" });
-    }
-  
     const fName = req.user.user_metadata?.first_name || "Patient";
     const lName = req.user.user_metadata?.last_name || "";
 
     try {
-        
+        const websiteContext = `
+            Your name is "ADANECH". You are the AI assistant for "SafeSpace Ethiopia".
+            - Provide empathetic support and guide users to professional doctors.
+            - SCOPE: ONLY discuss mental health, stress, anxiety, and wellness.
+            - LANGUAGE: Always match the user's language (English or Amharic).
+        `;
+
+        // Fetch last 6 messages to provide context
         const { data: history } = await supabase
             .from('messages')
-            .select('content, role, is_ai_response')
+            .select('content, is_ai_response')
             .eq('patient_id', patientId)
             .order('created_at', { ascending: false })
-            .limit(10);
+            .limit(6);
 
         let formattedHistory = history ? history.reverse().map(msg => ({
-            role: msg.is_ai_response || msg.role === 'ai' ? "model" : "user",
-            parts: [{ text: msg.content }]
+            role: msg.is_ai_response ? "model" : "user",
+            parts: [{ text: msg.content }],
         })) : [];
-        
-        // Gemini SDK: First message MUST be from 'user'
-        if (formattedHistory.length > 0 && formattedHistory[0].role === 'model') {
-            formattedHistory.shift();
-        }
-        
-        // Ensure we don't pass empty history if array becomes empty
-        if (formattedHistory.length === 0) {
-            formattedHistory = [];
+
+        // --- HISTORY GUARD: Fixes "First content must be user" error ---
+        while (formattedHistory.length > 0 && formattedHistory[0].role !== "user") {
+            formattedHistory.shift(); 
         }
 
-        const immediateCrisisKeywords = /\b(suicide|self-harm|kill myself|end my life|ራስን ማጥፋት)\b/i;
-        const isCrisis = immediateCrisisKeywords.test(message);
-        const riskLevel = isCrisis ? 'High' : 'Low';
-        const redirectToDoctor = isCrisis;    
-        
-        // Verify patient exists before inserting messages
-        try {
-            // Check if patient exists in database
-            const { data: patient, error: patientError } = await supabase
-                .from('patients')
-                .select('id')
-                .eq('id', patientId)
-                .single();
+        // Triage Logic
+        let riskLevel = 'Low';
+        const highRiskKeywords = /(suicide|kill myself|end it all|die|ራስን ማጥፋት|መሞት እፈልጋለሁ|ህይወቴን ማጥፋት|ሞት)/i;
+        if (highRiskKeywords.test(message)) riskLevel = 'High';
 
-            if (patientError || !patient) {
-                console.error('❌ Patient not found in database:', { patientId, error: patientError?.message });
-                return res.status(404).json({ error: "Patient profile not found. Please ensure you are properly registered." });
-            }
+        // Save User Message
+        await supabase.from('messages').insert([{
+            patient_id: patientId,
+            content: message,
+            is_ai_response: false,
+            flagged_reason: riskLevel === 'High' ? 'Suicide Risk' : null
+        }]);
 
-            console.log('✅ Patient verified:', patientId);
+        // Gemini Call
+        const chatSession = model.startChat({ history: formattedHistory });
+        const combinedPrompt = `System Context: ${websiteContext}\n\nUser Message: ${message}`;
+        const result = await chatSession.sendMessage(combinedPrompt);
+        const aiReply = result.response.text();
 
-            // Insert user message with all required fields
-            const { error: dbError } = await supabase.from('messages').insert([{
-                patient_id: patientId, // Use consistent patientId variable
-                content: message,
-                role: 'patient', // Changed from 'user' to 'patient' to match DB schema
-                is_ai_response: false
-            }]);
-            
-            if (dbError) {
-                console.error("❌ Supabase Save Error (User Message):", dbError.message);
-                return res.status(400).json({ error: dbError.message });
-            }
-        } catch (insertError) {
-            console.error("❌ Database Insert Error:", insertError.message);
-            return res.status(400).json({ error: insertError.message });
-        }
-
-        // Dual-Path Logic: Crisis vs Normal Counseling
-        let aiReply = '';
-        let finalReply = '';
-        
-        if (isCrisis) {
-            // Path B: Crisis - Don't call Gemini, use predefined response
-            finalReply = "Please select a doctor from list for immediate professional help.";
-            redirectToDoctor = true;
-            console.log('🚨 Crisis path: Using predefined crisis response');
-        } else {
-            try {
-                const chatSession = model.startChat({ history: formattedHistory });
-                const result = await chatSession.sendMessage(message);
-                finalReply = result.response.text();
-                console.log('💬 Normal path: Using Gemini counseling response');
-            } catch (geminiError) {
-                console.error('❌ Gemini API Error:', geminiError.message);
-                console.error('Full Gemini Error:', geminiError);
-                // Friendly fallback message for API failures
-                finalReply = "I'm having a little trouble connecting right now, but I've noted your message. Please try again in a moment or contact a doctor directly if it is urgent.";
-                console.log('🔄 Using fallback response due to Gemini failure');
-                
-                // Return proper JSON format even on error
-                return res.status(200).json({ 
-                    reply: finalReply, 
-                    isCrisis: false, 
-                    risk: 'Low', 
-                    redirectToDoctor: false,
-                    doctors: []
-                });
-            }
-            
-            // Additional fallback for empty responses
-            if (!finalReply || finalReply.trim() === '') {
-                console.log('⚠️ Empty response detected, using fallback');
-                finalReply = 'I received your message, but I\'m having trouble generating a response. How else can I help?';
-            }
-        }
-
-        // Handle High Risk Actions (Update DB & Notify Doctors)
+        // High Risk Actions
         let availableDoctors = [];
         if (riskLevel === 'High') {
-            await supabase.from('patients').update({ 
-                status: 'High', 
-                flagged_reason: 'high_risk' 
-            }).eq('id', patientId);
-
-            const { data: docs } = await supabase.from('doctors').select('id, name, speciality, email').limit(5);
+            await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
+            const { data: docs } = await supabase.from('doctors').select('id, name, speciality, email').limit(5); 
             availableDoctors = docs || [];
 
-            // Optional: Email notification logic for assigned doctor goes here...
+            // Alert Assigned Doctor
+            const { data: patientData } = await supabase.from('patients').select('assigned_doctor_id').eq('id', patientId).single();
+            if (patientData?.assigned_doctor_id) {
+                const { data: doctor } = await supabase.from('doctors').select('email').eq('id', patientData.assigned_doctor_id).single();
+                if (doctor?.email) {
+                    await transporter.sendMail({
+                        from: process.env.EMAIL_USER,
+                        to: doctor.email,
+                        subject: '🚨 URGENT: High-Risk Alert',
+                        html: `<p>Patient <b>${fName} ${lName}</b> is in crisis. Message: "${message}"</p>`
+                    });
+                }
+            }
         }
 
-        // Insert AI response with all required fields
-        const { error: aiResponseError } = await supabase.from('messages').insert([{
-            patient_id: patientId, // Use consistent patientId variable
-            content: finalReply, // Use finalReply (contains either AI response or crisis message)
-            is_ai_response: true,
-            role: 'ai'
+        // Save AI Message
+        await supabase.from('messages').insert([{
+            patient_id: patientId,
+            content: aiReply,
+            is_ai_response: true
         }]);
-        
-        if (aiResponseError) {
-            console.error("❌ Supabase Save Error (AI Response):", aiResponseError.message);
-            // Don't throw error, continue with response
-        }
 
-        console.log('✅ Chat processed successfully:', { 
-            riskLevel, 
-            isCrisis,
-            doctorsAvailable: availableDoctors.length,
-            messageLength: finalReply.length,
-            redirectToDoctor
-        });
-
+        // Frontend Expects { reply: ... }
         res.status(200).json({ 
-            reply: finalReply, 
-            isCrisis: isCrisis, 
             risk: riskLevel, 
-            redirectToDoctor: redirectToDoctor,
-            doctors: availableDoctors
+            reply: aiReply, 
+            doctors: availableDoctors 
         });
 
     } catch (err) {
-        console.error("--- CHAT PROCESSING ERROR ---", err.message);
-        console.error("--- ERROR STACK ---", err.stack);
-
-        if (err.message.includes('429')) {
-            return res.status(429).json({ 
-                error: "Google is still throttling your IP. Wait 5 minutes without sending ANY requests." 
-            });
-        }
-        
-        res.status(500).json({ 
-            error: err.message, 
-            stack: err.stack 
-        });
+        console.error("Gemini/Supabase Error:", err.message);
+        res.status(500).json({ error: "Failed to process chat" });
     }
 };
 
-
+/**
+ * 2. NOTIFY SELECTED DOCTOR
+ */
 export const notifySelectedDoctor = async (req, res) => {
     try {
         const { doctorId, messageContent } = req.body;
@@ -223,7 +139,7 @@ export const notifySelectedDoctor = async (req, res) => {
                 from: process.env.EMAIL_USER,
                 to: doctor.email,
                 subject: '🚨 EMERGENCY INTERVENTION REQUESTED',
-                html: `<p>A patient chose you for intervention.</p><p><b>Context:</b> ${messageContent}</p>`
+                html: `<p>A patient chose you for intervention.</p><p>Context: ${messageContent}</p>`
             });
             res.status(200).json({ success: true, message: `Alert sent to Dr. ${doctor.name}` });
         } else {
@@ -234,29 +150,13 @@ export const notifySelectedDoctor = async (req, res) => {
     }
 };
 
-
+/**
+ * 3. GET CHAT HISTORY (The Missing Export)
+ */
 export const getChatHistory = async (req, res) => {
     try {
         const supabase = getSupabase();
-        const userRole = req.user.user_metadata?.role;
-        const targetPatientId = req.params.patientId || req.user.id || req.user.userId; 
-        
-        // Validate that we have a patient ID
-        if (!targetPatientId) {
-            return res.status(400).json({ error: "Patient ID is required" });
-        }
-
-        if (userRole === 'doctor') {
-            // Allow access to ANY high-risk patient, not just assigned ones
-            const { data: access } = await supabase
-                .from('patients')
-                .select('id')
-                .eq('id', targetPatientId)
-                .eq('status', 'High') 
-                .single();
-
-            if (!access) return res.status(403).json({ error: "Access denied. Patient must be high-risk status." });
-        }
+        const targetPatientId = req.params.patientId || req.user.id; 
 
         const { data, error } = await supabase
             .from('messages')
