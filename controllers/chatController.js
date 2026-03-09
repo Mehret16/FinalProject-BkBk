@@ -120,8 +120,31 @@ export const handleChat = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Gemini/Supabase Error:", err.message);
-        res.status(500).json({ error: "Failed to process chat" });
+        console.error("=== FULL ERROR OBJECT ===");
+        console.dir(err, { depth: null });
+        console.error("=== ERROR MESSAGE ===", err.message);
+        console.error("=== ERROR STACK ===", err.stack);
+        
+        // Check for common API key issues
+        if (!process.env.GEMINI_API_KEY) {
+            console.error("❌ GEMINI_API_KEY is missing from environment variables");
+        }
+        
+        if (err.message.includes('API_KEY_INVALID') || err.message.includes('UNAUTHENTICATED')) {
+            console.error("❌ Invalid Gemini API Key - check Render Dashboard environment variables");
+        }
+        
+        if (err.message.includes('404') || err.message.includes('not found') || err.message.includes('model')) {
+            console.error("❌ Model 'gemini-2.5-flash-lite' may not be available - check Google AI Studio");
+        }
+        
+        // Return proper JSON format for frontend to prevent empty bubbles
+        res.status(500).json({ 
+            risk: 'Low', 
+            reply: "I'm having trouble connecting right now. Please try again in a moment.", 
+            doctors: [],
+            error: err.message 
+        });
     }
 };
 
