@@ -70,8 +70,14 @@ export const handleChat = async (req, res) => {
             role: msg.is_ai_response ? "model" : "user",
             parts: [{ text: msg.content }]
         })) : [];
+        
+        // Fix Gemini SDK requirement: First message must be from user
+        if (formattedHistory.length > 0 && formattedHistory[0].role === 'model') {
+            console.log('🔄 Removing model role from first position to satisfy Gemini SDK');
+            formattedHistory.shift();
+        }
 
-  const highRiskKeywords = /\b(kill|suicide|self-harm|ራስን ማጥፋት)\b/i;
+        const highRiskKeywords = /\b(kill|suicide|self-harm|ራስን ማጥፋት)\b/i;
         const immediateCrisisKeywords = /\b(suicide|self-harm|kill myself|end my life)\b/i;
         let riskLevel = 'Low';
         let isCrisis = false;
@@ -153,6 +159,15 @@ export const handleChat = async (req, res) => {
                 // Friendly fallback message for API failures
                 finalReply = "I'm having a little trouble connecting right now, but I've noted your message. Please try again in a moment or contact a doctor directly if it is urgent.";
                 console.log('🔄 Using fallback response due to Gemini failure');
+                
+                // Return proper JSON format even on error
+                return res.status(200).json({ 
+                    reply: finalReply, 
+                    isCrisis: false, 
+                    risk: 'Low', 
+                    redirectToDoctor: false,
+                    doctors: []
+                });
             }
             
             // Additional fallback for empty responses
