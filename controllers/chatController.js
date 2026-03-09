@@ -15,18 +15,6 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// 3. Setup Gemini AI (Gemini 1.5 Flash for 2026 stability)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash",
-    safetySettings: [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-    ]
-});
-
 /**
  * 1. HANDLE CHAT (Main Logic)
  */
@@ -39,6 +27,17 @@ export const handleChat = async (req, res) => {
     const lName = req.user.user_metadata?.last_name || "";
 
     try {
+        // Dynamic Gemini model initialization for fresh API key loading
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.0-flash",
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ]
+        });
         const websiteContext = `
             Your name is "ADANECH". You are the AI assistant for "SafeSpace Ethiopia".
             - Provide empathetic support and guide users to professional doctors.
@@ -135,7 +134,7 @@ export const handleChat = async (req, res) => {
         }
         
         if (err.message.includes('404') || err.message.includes('not found') || err.message.includes('model')) {
-            console.error("❌ Model 'gemini-2.5-flash-lite' may not be available - check Google AI Studio");
+            console.error("❌ Model 'gemini-2.0-flash' may not be available - check Google AI Studio");
         }
         
         // Return proper JSON format for frontend to prevent empty bubbles
