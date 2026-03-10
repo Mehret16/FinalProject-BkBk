@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import Groq from "groq-sdk";
+import { Groq } from "groq-sdk";
 import nodemailer from 'nodemailer';
 import 'dotenv/config';
 console.log("🔑 Checking GROQ Key:", process.env.GROQ_API_KEY ? "FOUND (Starts with gsk)" : "NOT FOUND ❌");
@@ -20,7 +20,7 @@ const transporter = nodemailer.createTransport({
  */
 export const handleChat = async (req, res) => {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
+    groq.timeout = 20000;
     const supabase = getSupabase();
     const patientId = req.user.id;
     const { message } = req.body;
