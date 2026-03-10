@@ -1,15 +1,31 @@
-import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
+import { createClient } from '@supabase/supabase-js';
 
-// 1. Setup Clients
-const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const getSupabaseAdmin = () => {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(`Supabase Configuration Missing: URL exists: ${!!url}, Key exists: ${!!key}`);
+  }
+  return createClient(url, key);
+};
+
+const getSupabase = () => {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error(`Supabase Configuration Missing: URL exists: ${!!url}, Key exists: ${!!key}`);
+  }
+  return createClient(url, key);
+};
 
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
 const handleSignup = async (req, res, assignedRole) => {
     console.log(' Request URL:', req.originalUrl);
     console.log('Incoming Body:', req.body);
+    const supabase = getSupabase();
+    const supabaseAdmin = getSupabaseAdmin();
     try {
         const { email, password, firstName, FirstName, lastName, LastName, age, gender, country, adminKey, specialization } = req.body;
         
@@ -19,9 +35,6 @@ const handleSignup = async (req, res, assignedRole) => {
         
         console.log(' Signup Request:', { email, firstName: finalFirstName, lastName: finalLastName, age, gender, country, assignedRole, specialization });
         
-        const supabase = getSupabase();
-        const supabaseAdmin = getSupabaseAdmin();
-
         // 2. Secret Key Check for Doctors
         if (assignedRole === 'doctor') {
             const DOCTOR_SECRET = process.env.DOCTOR_SIGNUP_SECRET || 'MY_SUPER_SECRET_123'; 
