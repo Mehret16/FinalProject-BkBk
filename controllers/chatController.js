@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import nodemailer from 'nodemailer';
 import 'dotenv/config';
 
-// 1. Initialize Supabase
+// 1. Initialize Clients
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // 2. Setup Nodemailer
 const transporter = nodemailer.createTransport({
@@ -16,7 +17,7 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
- * 1. HANDLE CHAT (Main Logic)
+ * 1. HANDLE CHAT
  */
 export const handleChat = async (req, res) => {
     const supabase = getSupabase();
@@ -27,26 +28,16 @@ export const handleChat = async (req, res) => {
     const lName = req.user.user_metadata?.last_name || "";
 
     try {
-        // Dynamic Gemini model initialization for fresh API key loading
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.0-flash",
-            apiVersion: "v1",
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-            ]
-        });
+        // --- PREPARE CONTEXT ---
         const websiteContext = `
-            You are the AI assistant for "SafeSpace Ethiopia".
-            - Provide empathetic support and guide users to professional doctors.
+            You are Adanech, the AI assistant for "SafeSpace Ethiopia".
+            - Provide empathetic mental health support and guide users to professional doctors.
             - SCOPE: ONLY discuss mental health, stress, anxiety, and wellness.
             - LANGUAGE: Always match the user's language (English or Amharic).
+            - Keep responses supportive but professional.
         `;
 
-        // Fetch last 6 messages to provide context
+        // Fetch last 6 messages for context
         const { data: history } = await supabase
             .from('messages')
             .select('content, is_ai_response')
@@ -54,22 +45,28 @@ export const handleChat = async (req, res) => {
             .order('created_at', { ascending: false })
             .limit(6);
 
-        let formattedHistory = history ? history.reverse().map(msg => ({
-            role: msg.is_ai_response ? "model" : "user",
-            parts: [{ text: msg.content }],
-        })) : [];
+        // Map history to Groq format { role: "user/assistant", content: "..." }
+        let chatMessages = [
+            { role: "system", content: websiteContext }
+        ];
 
-        // --- HISTORY GUARD: Fixes "First content must be user" error ---
-        while (formattedHistory.length > 0 && formattedHistory[0].role !== "user") {
-            formattedHistory.shift(); 
+        if (history) {
+            const formattedHistory = history.reverse().map(msg => ({
+                role: msg.is_ai_response ? "assistant" : "user",
+                content: msg.content,
+            }));
+            chatMessages.push(...formattedHistory);
         }
 
-        // Triage Logic
+        // Add the current message
+        chatMessages.push({ role: "user", content: message });
+
+        // --- TRIAGE LOGIC ---
         let riskLevel = 'Low';
         const highRiskKeywords = /(suicide|kill myself|end it all|die|ራስን ማጥፋት|መሞት እፈልጋለሁ|ህይወቴን ማጥፋት|ሞት)/i;
         if (highRiskKeywords.test(message)) riskLevel = 'High';
 
-        // Save User Message
+        // Save User Message to DB
         await supabase.from('messages').insert([{
             patient_id: patientId,
             content: message,
@@ -77,13 +74,16 @@ export const handleChat = async (req, res) => {
             flagged_reason: riskLevel === 'High' ? 'Suicide Risk' : null
         }]);
 
-        // Gemini Call
-        const chatSession = model.startChat({ history: formattedHistory });
-        const combinedPrompt = `System Context: ${websiteContext}\n\nUser Message: ${message}`;
-        const result = await chatSession.sendMessage(combinedPrompt);
-        const aiReply = result.response.text();
+        // --- GROQ API CALL ---
+        const chatCompletion = await groq.chat.completions.create({
+            messages: chatMessages,
+            model: "llama3-8b-8192", // Fast, reliable, and free
+            temperature: 0.7,
+        });
 
-        // High Risk Actions
+        const aiReply = chatCompletion.choices[0].message.content;
+
+        // --- HIGH RISK ACTIONS ---
         let availableDoctors = [];
         if (riskLevel === 'High') {
             await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
@@ -105,14 +105,14 @@ export const handleChat = async (req, res) => {
             }
         }
 
-        // Save AI Message
+        // Save AI Message to DB
         await supabase.from('messages').insert([{
             patient_id: patientId,
             content: aiReply,
             is_ai_response: true
         }]);
 
-        // Frontend Expects { reply: ... }
+        // Return to Frontend
         res.status(200).json({ 
             risk: riskLevel, 
             reply: aiReply, 
@@ -120,29 +120,9 @@ export const handleChat = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("=== FULL ERROR OBJECT ===");
-        console.dir(err, { depth: null });
-        console.error("=== ERROR MESSAGE ===", err.message);
-        console.error("=== ERROR STACK ===", err.stack);
-        
-        // Check for common API key issues
-        if (!process.env.GEMINI_API_KEY) {
-            console.error("❌ GEMINI_API_KEY is missing from environment variables");
-        }
-        
-        if (err.message.includes('API_KEY_INVALID') || err.message.includes('UNAUTHENTICATED')) {
-            console.error("❌ Invalid Gemini API Key - check Render Dashboard environment variables");
-        }
-        
-        if (err.message.includes('404') || err.message.includes('not found') || err.message.includes('model')) {
-            console.error("❌ Model 'gemini-2.0-flash' may not be available - check Google AI Studio");
-        }
-        
-        // Return proper JSON format for frontend to prevent empty bubbles
+        console.error("Groq/Server Error:", err.message);
         res.status(500).json({ 
-            risk: 'Low', 
-            reply: "I'm having trouble connecting right now. Please try again in a moment.", 
-            doctors: [],
+            reply: "I'm having trouble connecting right now. Please try again later.", 
             error: err.message 
         });
     }
@@ -162,7 +142,7 @@ export const notifySelectedDoctor = async (req, res) => {
                 from: process.env.EMAIL_USER,
                 to: doctor.email,
                 subject: '🚨 EMERGENCY INTERVENTION REQUESTED',
-                html: `<p>A patient chose you for intervention.</p><p>Context: ${messageContent}</p>`
+                html: `<p>A patient requested an urgent intervention.</p><p>Context: ${messageContent}</p>`
             });
             res.status(200).json({ success: true, message: `Alert sent to Dr. ${doctor.name}` });
         } else {
@@ -174,7 +154,7 @@ export const notifySelectedDoctor = async (req, res) => {
 };
 
 /**
- * 3. GET CHAT HISTORY (The Missing Export)
+ * 3. GET CHAT HISTORY
  */
 export const getChatHistory = async (req, res) => {
     try {
@@ -190,6 +170,6 @@ export const getChatHistory = async (req, res) => {
         if (error) throw error;
         res.status(200).json(data);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: "Failed to fetch history" });
     }
 };
