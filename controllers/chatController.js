@@ -30,7 +30,7 @@ export const handleChat = async (req, res) => {
         // Dynamic Gemini model initialization for fresh API key loading
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.0-flash",
+            model: "gemini-1.5-flash",
             safetySettings: [
                 { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
                 { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -39,7 +39,7 @@ export const handleChat = async (req, res) => {
             ]
         });
         const websiteContext = `
-            Your name is "ADANECH". You are the AI assistant for "SafeSpace Ethiopia".
+            You are the AI assistant for "SafeSpace Ethiopia".
             - Provide empathetic support and guide users to professional doctors.
             - SCOPE: ONLY discuss mental health, stress, anxiety, and wellness.
             - LANGUAGE: Always match the user's language (English or Amharic).
