@@ -30,7 +30,7 @@ export const handleChat = async (req, res) => {
         // Dynamic Gemini model initialization for fresh API key loading
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             apiVersion: "v1",
             safetySettings: [
                 { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
