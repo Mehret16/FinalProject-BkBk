@@ -2,10 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import Groq from "groq-sdk";
 import nodemailer from 'nodemailer';
 import 'dotenv/config';
-
+console.log("🔑 Checking GROQ Key:", process.env.GROQ_API_KEY ? "FOUND (Starts with gsk)" : "NOT FOUND ❌");
 // 1. Initialize Clients
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // 2. Setup Nodemailer
 const transporter = nodemailer.createTransport({
@@ -20,6 +19,8 @@ const transporter = nodemailer.createTransport({
  * 1. HANDLE CHAT
  */
 export const handleChat = async (req, res) => {
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
     const supabase = getSupabase();
     const patientId = req.user.id;
     const { message } = req.body;
@@ -30,7 +31,7 @@ export const handleChat = async (req, res) => {
     try {
         // --- PREPARE CONTEXT ---
         const websiteContext = `
-            You are Adanech, the AI assistant for "SafeSpace Ethiopia".
+            You are AI assistant for "SafeSpace".
             - Provide empathetic mental health support and guide users to professional doctors.
             - SCOPE: ONLY discuss mental health, stress, anxiety, and wellness.
             - LANGUAGE: Always match the user's language (English or Amharic).
