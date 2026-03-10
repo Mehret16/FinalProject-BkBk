@@ -1,23 +1,33 @@
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config'; 
-console.log("Checking Env Vars:", { 
-  hasUrl: !!process.env.SUPABASE_URL, 
-  hasKey: !!process.env.SUPABASE_ANON_KEY 
-});
 
-const supabase = createClient(
-    process.env.SUPABASE_URL, 
-    process.env.SUPABASE_ANON_KEY
-);
+// Function to safely get Supabase Client only when needed
+const getSupabase = () => {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_ANON_KEY;
+    if (!url || !key) {
+        console.error("❌ Critical: Missing Supabase Environment Variables!");
+        throw new Error("supabaseKey or supabaseUrl is missing from environment.");
+    }
+    return createClient(url, key);
+};
 
-const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL, 
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-console.log("Checking Supabase...", supabase ? "Client Initialized" : "Client Failed");
+// Function to safely get Admin Client
+const getSupabaseAdmin = () => {
+    const url = process.env.SUPABASE_URL;
+    const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !adminKey) {
+        console.error("❌ Critical: Missing Supabase Admin Key!");
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY is missing from environment.");
+    }
+    return createClient(url, adminKey);
+};
 
 export const verifyToken = async (req, res, next) => {
+    // Initialize clients INSIDE the middleware to ensure process.env is ready
+    const supabase = getSupabase();
+    const supabaseAdmin = getSupabaseAdmin();
+
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith('Bearer ') 
         ? authHeader.split(' ')[1] 
@@ -32,6 +42,7 @@ export const verifyToken = async (req, res, next) => {
         const { data: { user }, error } = await supabase.auth.getUser(token);
 
         if (error || !user) {
+            console.log('❌ Middleware: Invalid token or user not found');
             return res.status(401).json({ error: "Session expired. Please login again." });
         }
 
@@ -42,7 +53,7 @@ export const verifyToken = async (req, res, next) => {
         if (!userRole) {
             console.log('🔍 Middleware: Role not in metadata, checking database...');
             
-            // Check patients table first
+            // Check patients table
             const { data: patientData, error: patientError } = await supabaseAdmin
                 .from('patients')
                 .select('role')
@@ -50,7 +61,7 @@ export const verifyToken = async (req, res, next) => {
                 .single();
             
             if (!patientError && patientData) {
-                userRole = patientData.role;
+                userRole = patientData.role || 'patient';
                 console.log('✅ Middleware: Found role in patients table:', userRole);
             } else {
                 // Check doctors table
@@ -67,18 +78,14 @@ export const verifyToken = async (req, res, next) => {
             }
         }
 
-        // 4. Default to patient if still not found
-        if (!userRole) {
-            userRole = 'patient';
-            console.log('⚠️ Middleware: Role not found, defaulting to patient');
-        }
-
+        // 4. Final check and assignment
         req.user = {
             ...user,
-            role: userRole
+            id: user.id, // Explicitly set for handleChat
+            role: userRole || 'patient'
         };
 
-        console.log('🔐 Middleware Success:', { userId: user.id, role: userRole });
+        console.log('🔐 Middleware Success:', { userId: user.id, role: req.user.role });
         next();
     } catch (err) {
         console.error("Auth Middleware Crash:", err.message);
