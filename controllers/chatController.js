@@ -4,10 +4,8 @@ import nodemailer from 'nodemailer';
 import 'dotenv/config';
 import { Agent } from 'undici';
 
-// 1. Initialize Clients
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-// 2. Setup Nodemailer
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { 
@@ -16,10 +14,6 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-/**
- * 1. HANDLE CHAT
- * Processes messages, performs clinical triage, and manages AI response + doctor referrals.
- */
 export const handleChat = async (req, res) => {
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
     const groq = new Groq({ 
@@ -29,42 +23,45 @@ export const handleChat = async (req, res) => {
     
     groq.timeout = 30000;
     const supabase = getSupabase();
+    
+    // Validate request body
+    if (!req.body.message) {
+        return res.status(400).json({ error: "Message is required" });
+    }
+
     const patientId = req.user.id;
     const { message } = req.body;
-    
     const fName = req.user.user_metadata?.first_name || "Patient";
     const lName = req.user.user_metadata?.last_name || "";
 
     try {
-        // --- 1. PRECISE CLINICAL TRIAGE ---
+        // --- 1. IMPROVED TRIAGE LOGIC ---
         let riskLevel = 'Low';
-        const highRiskKeywords = /(suicide|kill myself|end it all|die|life is pointless|don't want to live|ራስን ማጥፋት|መሞት እፈልጋለሁ|ህይወቴን ማጥፋት|ሞት|self-harm|cutting|burning|voices|hurt myself|hallucination|delusion|psychosis|schizophrenia|manic|anorexia|bulimia|addiction|loss of control)/i;
-        const mediumRiskKeywords = /(depression|empty and tired|anxiety|stop worrying|panic|panic for no reason|ocd|obsessive|compulsive|ptsd|social anxiety|personality disorder|instability)/i;
+        
+        // Split into smaller groups for better matching reliability
+        const highRiskPattern = /suicide|kill|die|pointless|end it|ራስን ማጥፋት|መሞት|ሞት|self-harm|cut|burn|voices|hallucination|psychosis|schizophrenia|anorexia|bulimia/i;
+        const mediumRiskPattern = /depression|anxiety|panic|ocd|ptsd|empty|tired|worrying|personality|instability/i;
 
-        if (highRiskKeywords.test(message)) {
+        if (highRiskPattern.test(message)) {
             riskLevel = 'High';
-        } else if (mediumRiskKeywords.test(message)) {
+        } else if (mediumRiskPattern.test(message)) {
             riskLevel = 'Medium';
         }
 
-        // --- 2. PREPARE AI CONTEXT & HISTORY ---
-        const { data: history } = await supabase
+        // --- 2. FETCH HISTORY ---
+        const { data: history, error: historyError } = await supabase
             .from('messages')
             .select('content, is_ai_response')
             .eq('patient_id', patientId)
             .order('created_at', { ascending: false })
             .limit(6);
 
-        const websiteContext = `
-            You are SafeSpace AI assistant.
-            SCOPE: Mental health only (stress, anxiety, wellness).
-            LANGUAGE: Match the user's language (English or Amharic).
-            CRISIS PROTOCOL: If risk is HIGH (self-harm/suicide), be extremely empathetic and say: 
-            "I hear you, and I want to make sure you get the right support immediately. Please choose one of our available professional doctors below to start a direct intervention."
-        `;
+        if (historyError) console.error("Supabase History Error:", historyError);
+
+        const websiteContext = `You are SafeSpace AI. If the user expresses self-harm or suicide (High Risk), be empathetic and tell them: "I hear you, and I want to make sure you get the right support immediately. Please choose one of our available professional doctors below to start a direct intervention."`;
 
         let chatMessages = [{ role: "system", content: websiteContext }];
-        if (history) {
+        if (history && history.length > 0) {
             chatMessages.push(...history.reverse().map(msg => ({
                 role: msg.is_ai_response ? "assistant" : "user",
                 content: msg.content,
@@ -76,27 +73,28 @@ export const handleChat = async (req, res) => {
         const chatCompletion = await groq.chat.completions.create({
             messages: chatMessages,
             model: "llama-3.3-70b-versatile",
-            temperature: 0.7,
+            temperature: 0.6,
         });
 
         const aiReply = chatCompletion.choices[0].message.content;
 
-        // --- 4. HIGH RISK ACTIONS & DOCTOR FETCHING ---
+        // --- 4. DOCTOR FETCHING & RISK ACTIONS ---
         let availableDoctors = [];
         if (riskLevel === 'High') {
-            // Mark patient as High Risk
+            // Update patient status
             await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
             
-            // Fetch Online Doctors; Fallback to all registered if none are online
-            let { data: docs } = await supabase.from('doctors').select('id, name, speciality, avatar').eq('is_online', true).limit(5);
+            // Fetch doctors: Try online first, then fallback to ANY doctor
+            const { data: onlineDocs } = await supabase.from('doctors').select('id, name, speciality, avatar').eq('is_online', true).limit(5);
             
-            if (!docs || docs.length === 0) {
+            if (!onlineDocs || onlineDocs.length === 0) {
                 const { data: allDocs } = await supabase.from('doctors').select('id, name, speciality, avatar').limit(5);
-                docs = allDocs;
+                availableDoctors = allDocs || [];
+            } else {
+                availableDoctors = onlineDocs;
             }
-            availableDoctors = docs || [];
 
-            // Email Notification for Assigned Doctor
+            // Notification logic
             const { data: patientData } = await supabase.from('patients').select('assigned_doctor_id').eq('id', patientId).single();
             if (patientData?.assigned_doctor_id) {
                 const { data: doctor } = await supabase.from('doctors').select('email').eq('id', patientData.assigned_doctor_id).single();
@@ -111,13 +109,13 @@ export const handleChat = async (req, res) => {
             }
         }
 
-        // --- 5. SAVE CONVERSATION TO DATABASE ---
-        await supabase.from('messages').insert([
+        // --- 5. PERSIST TO DATABASE (The "Connection" fix) ---
+        const { error: insertError } = await supabase.from('messages').insert([
             { 
                 patient_id: patientId, 
                 content: message, 
                 is_ai_response: false, 
-                flagged_reason: riskLevel !== 'Low' ? `${riskLevel} Risk Detected` : null 
+                flagged_reason: riskLevel !== 'Low' ? `${riskLevel} Risk` : null 
             },
             { 
                 patient_id: patientId, 
@@ -127,6 +125,11 @@ export const handleChat = async (req, res) => {
             }
         ]);
 
+        if (insertError) {
+            console.error("Supabase Insert Error:", insertError);
+            // Even if DB fails, we should still respond to the user
+        }
+
         // --- 6. FINAL RESPONSE ---
         return res.status(200).json({ 
             risk: riskLevel, 
@@ -135,17 +138,14 @@ export const handleChat = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Critical Error in handleChat:", err.message);
+        console.error("Critical System Error:", err);
         return res.status(500).json({ 
-            reply: "I'm having trouble connecting right now. Please try again later.", 
+            reply: "The system is currently experiencing a connection issue.", 
             debug_info: err.message 
         });
     }
 };
 
-/**
- * 2. NOTIFY SELECTED DOCTOR
- */
 export const notifySelectedDoctor = async (req, res) => {
     try {
         const { doctorId, messageContent } = req.body;
@@ -156,35 +156,29 @@ export const notifySelectedDoctor = async (req, res) => {
             await transporter.sendMail({
                 from: process.env.EMAIL_USER,
                 to: doctor.email,
-                subject: '🚨 EMERGENCY INTERVENTION REQUESTED',
-                html: `<p>A patient requested an urgent intervention.</p><p>Patient Message Context: ${messageContent}</p>`
+                subject: '🚨 EMERGENCY INTERVENTION',
+                html: `<p>Context: ${messageContent}</p>`
             });
             return res.status(200).json({ success: true, message: `Alert sent to Dr. ${doctor.name}` });
-        } else {
-            return res.status(404).json({ error: "Doctor not found" });
         }
+        return res.status(404).json({ error: "Doctor not found" });
     } catch (err) {
-        return res.status(500).json({ error: "Failed to notify doctor" });
+        return res.status(500).json({ error: err.message });
     }
 };
 
-/**
- * 3. GET CHAT HISTORY
- */
 export const getChatHistory = async (req, res) => {
     try {
         const supabase = getSupabase();
-        const targetPatientId = req.params.patientId || req.user.id; 
-
         const { data, error } = await supabase
             .from('messages')
             .select('*')
-            .eq('patient_id', targetPatientId)
+            .eq('patient_id', req.user.id)
             .order('created_at', { ascending: true });
 
         if (error) throw error;
         return res.status(200).json(data);
     } catch (err) {
-        return res.status(500).json({ error: "Failed to fetch history" });
+        return res.status(500).json({ error: err.message });
     }
 };
