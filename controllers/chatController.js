@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Groq } from "groq-sdk";
 import nodemailer from 'nodemailer';
 import 'dotenv/config';
-import * as httpx from 'httpx';
+import https from 'https';
 console.log("🔑 Checking GROQ Key:", process.env.GROQ_API_KEY ? "FOUND (Starts with gsk)" : "NOT FOUND ❌");
 // 1. Initialize Clients
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
@@ -22,7 +22,12 @@ const transporter = nodemailer.createTransport({
 export const handleChat = async (req, res) => {
    const groq = new Groq({ 
         apiKey: process.env.GROQ_API_KEY,
-        http_client: new httpx.Client({ verify: false }) 
+        http_client: {
+            fetch: (url, options) => {
+                const agent = new https.Agent({ rejectUnauthorized: false });
+                return fetch(url, { ...options, agent });
+            }
+        }
     });
     
     groq.timeout = 30000;
