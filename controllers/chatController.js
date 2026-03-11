@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Groq } from "groq-sdk";
 import nodemailer from 'nodemailer';
 import 'dotenv/config';
-import httpx from 'httpx';
+import * as httpx from 'httpx';
 console.log("🔑 Checking GROQ Key:", process.env.GROQ_API_KEY ? "FOUND (Starts with gsk)" : "NOT FOUND ❌");
 // 1. Initialize Clients
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
