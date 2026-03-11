@@ -16,9 +16,6 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-/**
- * 1. HANDLE CHAT
- */
 export const handleChat = async (req, res) => {
     const dispatcher = new Agent({
         connect: { rejectUnauthorized: false }
@@ -40,12 +37,14 @@ export const handleChat = async (req, res) => {
     try {
         // --- PREPARE CONTEXT ---
         const websiteContext = `
-            You are AI assistant for "SafeSpace".
-            - Provide empathetic mental health support and guide users to professional doctors.
-            - SCOPE: ONLY discuss mental health, stress, anxiety, and wellness.
-            - LANGUAGE: Always match the user's language (English or Amharic).
-            - Keep responses supportive but professional.
-        `;
+           You are SafeSpace AI. 
+    SCOPE: Mental health only.
+    LANGUAGE: Match user (English/Amharic).
+    CRISIS PROTOCOL: If a user expresses self-harm or suicide:
+    1. Be extremely empathetic and calm.
+    2. Tell them: "I hear you, and I want to make sure you get the right support immediately. Please choose one of our available professional doctors below to start a direct intervention."
+    3. Stop giving general advice and focus on the referral.
+`;
 
         // Fetch last 6 messages for context
         const { data: history } = await supabase
@@ -68,39 +67,57 @@ export const handleChat = async (req, res) => {
             chatMessages.push(...formattedHistory);
         }
 
-        // Add the current message
         chatMessages.push({ role: "user", content: message });
+let riskLevel = 'Low';
+const highRiskKeywords = /(suicide|kill myself|end it all|die|life is pointless|don't want to live|ራስን ማጥፋት|መሞት እፈልጋለሁ|ህይወቴን ማጥፋት|ሞት|self-harm|cutting|burning|voices|hurt myself|hallucination|delusion|psychosis|schizophrenia|manic|anorexia|bulimia|addiction|loss of control)/i;
+        const mediumRiskKeywords = /(depression|empty and tired|anxiety|stop worrying|panic|panic for no reason|ocd|obsessive|compulsive|ptsd|social anxiety|personality disorder|instability)/i;
+        if (highRiskKeywords.test(message)) {
+            riskLevel = 'High';
+        } else if (mediumRiskKeywords.test(message)) {
+            riskLevel = 'Medium';
+        } else {
+            riskLevel = 'Low';
+        }
 
-        // --- TRIAGE LOGIC ---
-        let riskLevel = 'Low';
-        const highRiskKeywords = /(suicide|kill myself|end it all|die|ራስን ማጥፋት|መሞት እፈልጋለሁ|ህይወቴን ማጥፋት|ሞት)/i;
-        if (highRiskKeywords.test(message)) riskLevel = 'High';
-
-        // Save User Message to DB
+      
         await supabase.from('messages').insert([{
             patient_id: patientId,
             content: message,
             is_ai_response: false,
-            flagged_reason: riskLevel === 'High' ? 'Suicide Risk' : null
+            flagged_reason: riskLevel !== 'Low' ? `${riskLevel} Risk Detected` : null
         }]);
 
-        // --- GROQ API CALL ---
         const chatCompletion = await groq.chat.completions.create({
             messages: chatMessages,
-            model: "llama-3.3-70b-versatile", // Fast, reliable, and free
+            model: "llama-3.3-70b-versatile", 
             temperature: 0.7,
         });
 
         const aiReply = chatCompletion.choices[0].message.content;
 
-        // --- HIGH RISK ACTIONS ---
         let availableDoctors = [];
         if (riskLevel === 'High') {
             await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
-            const { data: docs } = await supabase.from('doctors').select('id, name, speciality, email').limit(5); 
+            const { data: docs } = await supabase
+        .from('doctors')
+        .select('id, name, speciality, avatar')
+        .eq('is_online', true) 
+        .limit(5);
             availableDoctors = docs || [];
 
-            // Alert Assigned Doctor
+            await supabase.from('messages').insert([{
+    patient_id: patientId,
+    content: aiReply,
+    is_ai_response: true,
+    metadata: { risk: riskLevel }
+}]);
+
+res.status(200).json({ 
+    risk: riskLevel, 
+    reply: aiReply, 
+    doctors: availableDoctors 
+});
+
             const { data: patientData } = await supabase.from('patients').select('assigned_doctor_id').eq('id', patientId).single();
             if (patientData?.assigned_doctor_id) {
                 const { data: doctor } = await supabase.from('doctors').select('email').eq('id', patientData.assigned_doctor_id).single();
@@ -154,9 +171,6 @@ export const handleChat = async (req, res) => {
       
 };
 
-/**
- * 2. NOTIFY SELECTED DOCTOR
- */
 export const notifySelectedDoctor = async (req, res) => {
     try {
         const { doctorId, messageContent } = req.body;
@@ -179,9 +193,7 @@ export const notifySelectedDoctor = async (req, res) => {
     }
 };
 
-/**
- * 3. GET CHAT HISTORY
- */
+
 export const getChatHistory = async (req, res) => {
     try {
         const supabase = getSupabase();
