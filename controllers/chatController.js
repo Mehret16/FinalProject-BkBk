@@ -121,12 +121,28 @@ export const handleChat = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Groq/Server Error:", err.message);
-        res.status(500).json({ 
-            reply: "I'm having trouble connecting right now. Please try again later.", 
-            error: err.message 
-        });
+      //  console.error("Groq/Server Error:", err.message);
+       // res.status(500).json({ 
+          //  reply: "I'm having trouble connecting right now. Please try again later.", 
+           // error: err.message 
+          
+    console.error("--- 🚨 GROQ DEBUG START 🚨 ---");
+    console.error("Error Name:", err.name);           // e.g., APIConnectionError
+    console.error("Status Code:", err.status);       // e.g., 401, 403, 429
+    console.error("Error Message:", err.message);    // The specific reason
+    
+    // Log the actual response if it's available
+    if (err.response) {
+        console.error("Response Data:", await err.response.text());
     }
+    console.error("--- 🚨 GROQ DEBUG END 🚨 ---");
+
+    res.status(500).json({ 
+        reply: "Connection error detected.", 
+        debug_info: err.message 
+    });
+}
+      
 };
 
 /**
