@@ -14,6 +14,10 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+/**
+ * HANDLE CHAT
+ * Triage risk, call Groq, fetch doctors on High risk, and persist to Supabase.
+ */
 export const handleChat = async (req, res) => {
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
     const groq = new Groq({ 
@@ -24,7 +28,6 @@ export const handleChat = async (req, res) => {
     groq.timeout = 30000;
     const supabase = getSupabase();
     
-    // Validate request body
     if (!req.body.message) {
         return res.status(400).json({ error: "Message is required" });
     }
@@ -35,10 +38,8 @@ export const handleChat = async (req, res) => {
     const lName = req.user.user_metadata?.last_name || "";
 
     try {
-        // --- 1. IMPROVED TRIAGE LOGIC ---
+        // --- 1. TRIAGE LOGIC ---
         let riskLevel = 'Low';
-        
-        // Split into smaller groups for better matching reliability
         const highRiskPattern = /suicide|kill|die|pointless|end it|ራስን ማጥፋት|መሞት|ሞት|self-harm|cut|burn|voices|hallucination|psychosis|schizophrenia|anorexia|bulimia/i;
         const mediumRiskPattern = /depression|anxiety|panic|ocd|ptsd|empty|tired|worrying|personality|instability/i;
 
@@ -81,21 +82,19 @@ export const handleChat = async (req, res) => {
         // --- 4. DOCTOR FETCHING & RISK ACTIONS ---
         let availableDoctors = [];
         if (riskLevel === 'High') {
+            // Update patient status in DB
             await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
 
-            // Fetch doctors: Try online first, then fallback to ANY doctor
-           const { data: docs, error: docError } = await supabase
+            // Fetch any 5 doctors (removed is_online filter to ensure results)
+            const { data: docs, error: docError } = await supabase
                 .from('doctors')
                 .select('id, name, speciality')
                 .limit(5);
 
             if (docError) console.error("Doctor Fetch Error:", docError);
             availableDoctors = docs || [];
-            } else {
-                availableDoctors = onlineDocs;
-            }
 
-            // Notification logic
+            // Email Notification for Assigned Doctor
             const { data: patientData } = await supabase.from('patients').select('assigned_doctor_id').eq('id', patientId).single();
             if (patientData?.assigned_doctor_id) {
                 const { data: doctor } = await supabase.from('doctors').select('email').eq('id', patientData.assigned_doctor_id).single();
@@ -110,26 +109,25 @@ export const handleChat = async (req, res) => {
             }
         }
 
-        // --- 5. PERSIST TO DATABASE (The "Connection" fix) ---
+        // --- 5. PERSIST TO DATABASE (Aligned with Schema) ---
         const { error: insertError } = await supabase.from('messages').insert([
             { 
                 patient_id: patientId, 
                 content: message, 
+                role: 'user', 
                 is_ai_response: false, 
                 flagged_reason: riskLevel !== 'Low' ? `${riskLevel} Risk` : null 
             },
             { 
                 patient_id: patientId, 
                 content: aiReply, 
+                role: 'ai', 
                 is_ai_response: true, 
                 metadata: { risk: riskLevel } 
             }
         ]);
 
-        if (insertError) {
-            console.error("Supabase Insert Error:", insertError);
-            // Even if DB fails, we should still respond to the user
-        }
+        if (insertError) console.error("Supabase Insert Error:", insertError);
 
         // --- 6. FINAL RESPONSE ---
         return res.status(200).json({ 
@@ -147,6 +145,9 @@ export const handleChat = async (req, res) => {
     }
 };
 
+/**
+ * NOTIFY SELECTED DOCTOR
+ */
 export const notifySelectedDoctor = async (req, res) => {
     try {
         const { doctorId, messageContent } = req.body;
@@ -158,7 +159,7 @@ export const notifySelectedDoctor = async (req, res) => {
                 from: process.env.EMAIL_USER,
                 to: doctor.email,
                 subject: '🚨 EMERGENCY INTERVENTION',
-                html: `<p>Context: ${messageContent}</p>`
+                html: `<p>A patient requested urgent intervention.</p><p>Context: ${messageContent}</p>`
             });
             return res.status(200).json({ success: true, message: `Alert sent to Dr. ${doctor.name}` });
         }
@@ -168,6 +169,9 @@ export const notifySelectedDoctor = async (req, res) => {
     }
 };
 
+/**
+ * GET CHAT HISTORY
+ */
 export const getChatHistory = async (req, res) => {
     try {
         const supabase = getSupabase();
