@@ -87,7 +87,7 @@ export const handleChat = async (req, res) => {
         // --- GROQ API CALL ---
         const chatCompletion = await groq.chat.completions.create({
             messages: chatMessages,
-            model: "llama3-8b-8192", // Fast, reliable, and free
+            model: "llama-3.3-70b-versatile", // Fast, reliable, and free
             temperature: 0.7,
         });
 
