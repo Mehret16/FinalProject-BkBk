@@ -81,15 +81,16 @@ export const handleChat = async (req, res) => {
         // --- 4. DOCTOR FETCHING & RISK ACTIONS ---
         let availableDoctors = [];
         if (riskLevel === 'High') {
-            // Update patient status
             await supabase.from('patients').update({ status: 'High' }).eq('id', patientId);
-            
+
             // Fetch doctors: Try online first, then fallback to ANY doctor
-            const { data: onlineDocs } = await supabase.from('doctors').select('id, name, speciality, avatar').eq('is_online', true).limit(5);
-            
-            if (!onlineDocs || onlineDocs.length === 0) {
-                const { data: allDocs } = await supabase.from('doctors').select('id, name, speciality, avatar').limit(5);
-                availableDoctors = allDocs || [];
+           const { data: docs, error: docError } = await supabase
+                .from('doctors')
+                .select('id, name, speciality')
+                .limit(5);
+
+            if (docError) console.error("Doctor Fetch Error:", docError);
+            availableDoctors = docs || [];
             } else {
                 availableDoctors = onlineDocs;
             }
