@@ -7,7 +7,7 @@ import chatRoutes from './routes/chatRoutes.js';
 
 const app = express();
 app.use(cors({
-   origin:[ 'https://safespace-health.netlify.app','https://safespacementalhealth.vercel.app/','https://safespace-9q19phv3r-mashebercctechet-3463s-projects.vercel.app','http://localhost:5174','http://localhost:3000','http://localhost:5175',  
+   origin:[ 'https://safespace-health.netlify.app','https://safespacementalhealth.vercel.app','https://safespace-9q19phv3r-mashebercctechet-3463s-projects.vercel.app','http://localhost:5174','http://localhost:3000','http://localhost:5175',  
      'http://localhost:5173',   
      'http://localhost:3000'],
     credentials: true,
