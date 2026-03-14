@@ -4,48 +4,41 @@ import 'dotenv/config';
 const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+/**
+ * GET ALL DOCTORS
+ * Used by patients to browse available doctors
+ */
 export const getAllDoctors = async (req, res) => {
     try {
         const supabase = getSupabase();
         
-        console.log('🔍 Fetching doctors for user:', { userId: req.user.id, userRole: req.user.role });
-        
-        // Query doctors table with correct column names
         const { data, error } = await supabase
             .from('doctors')
-            .select('id, name, speciality, role, gender, email');
+            .select('id, name, speciality, is_online, avatar, email');
 
-        if (error) {
-            console.error('❌ Database error fetching doctors:', error.message);
-            throw error;
-        }
+        if (error) throw error;
 
-        // Filter to only include doctors with role set to 'doctor'
-        const doctorsWithRole = (data || []).filter(doctor => doctor.role === 'doctor');
-
-        console.log('✅ Successfully fetched doctors:', { 
-            total: data?.length || 0, 
-            withDoctorRole: doctorsWithRole.length 
-        });
-        
-        // Return empty array if no doctors found
-        res.status(200).json(doctorsWithRole);
+        res.status(200).json(data || []);
     } catch (error) {
         console.error('❌ Error in getAllDoctors:', error.message);
-        console.dir(error); // Add full error object inspection
         res.status(500).json({ error: "Failed to fetch doctors list" });
     }
 };
 
+/**
+ * ASSIGN DOCTOR
+ * Links a patient to a specific doctor in the database
+ */
 export const assignDoctor = async (req, res) => {
     try {
         const { doctorId } = req.body;
-        const supabase = getSupabase();
+        const patientId = req.user.id;
+        const supabase = getSupabaseAdmin(); // Admin needed to update other user profiles
         
         const { error } = await supabase
             .from('patients')
             .update({ assigned_doctor_id: doctorId })
-            .eq('id', req.user.id);
+            .eq('id', patientId);
 
         if (error) throw error;
         res.status(200).json({ message: "Doctor assigned successfully" });
@@ -54,41 +47,67 @@ export const assignDoctor = async (req, res) => {
     }
 };
 
-
+/**
+ * GET HIGH RISK PATIENTS
+ * Used by the Doctor Dashboard to show crisis alerts
+ */
 export const getHighRiskPatients = async (req, res) => {
     try {
         const supabase = getSupabase();
         
-        console.log('🔍 Fetching ALL high-risk patients for doctor:', { doctorId: req.user.id });
-        
-        // Return ALL patients with status === 'High', not just assigned ones
+        // Fetches patients with High risk. 
+        // Note: RLS handles the privacy of who can see what.
         const { data, error } = await supabase
             .from('patients')
-            .select('id, first_name, last_name, email, status, flagged_reason, created_at') 
+            .select('id, first_name, last_name, email, status, created_at') 
             .eq('status', 'High')
             .order('created_at', { ascending: false });
 
-        if (error) {
-            console.error('❌ Database error fetching high-risk patients:', error.message);
-            throw error;
-        }
-
-        console.log('✅ Successfully fetched high-risk patients:', { count: data?.length || 0 });
-        
-        // Return empty array if no patients found
-        const patients = data || [];
-        res.status(200).json(patients);
+        if (error) throw error;
+        res.status(200).json(data || []);
     } catch (error) {
         console.error('❌ Error in getHighRiskPatients:', error.message);
-        res.status(500).json({ error: "Failed to fetch high-risk patients" });
+        res.status(500).json({ error: "Failed to fetch alerts" });
     }
 };
 
+/**
+ * DOCTOR REPLY
+ * Insert a message from the doctor into the shared chat history
+ */
+export const doctorReply = async (req, res) => {
+    try {
+        const { patientId, message } = req.body;
+        const doctorId = req.user.id;
+        const supabase = getSupabaseAdmin(); 
 
+        const { error } = await supabase
+            .from('messages')
+            .insert([{
+                patient_id: patientId,
+                doctor_id: doctorId,
+                content: message,
+                sender_type: 'doctor', // Aligned with new SQL Schema
+                is_ai_response: false,
+                is_read: false
+            }]);
+
+        if (error) throw error;
+        res.status(200).json({ message: "Reply sent to patient" });
+    } catch (error) {
+        console.error('❌ Error in doctorReply:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * UPDATE PATIENT STATUS
+ * Allows doctor to manually lower or raise risk levels
+ */
 export const updatePatientStatus = async (req, res) => {
     try {
         const { patientId, newStatus } = req.body; 
-        const supabase = getSupabase();
+        const supabase = getSupabaseAdmin();
         
         const { error } = await supabase
             .from('patients')
@@ -97,28 +116,6 @@ export const updatePatientStatus = async (req, res) => {
 
         if (error) throw error;
         res.status(200).json({ message: `Patient status updated to ${newStatus}` });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-
-export const doctorReply = async (req, res) => {
-    try {
-        const { patientId, message } = req.body;
-        const supabase = getSupabaseAdmin(); // Use admin client to bypass RLS
-
-        const { error } = await supabase
-            .from('messages')
-            .insert([{
-                patient_id: patientId,
-                content: message,
-                role: 'user', // Doctor messages are from user perspective
-                is_ai_response: false 
-            }]);
-
-        if (error) throw error;
-        res.status(200).json({ message: "Reply sent to patient" });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

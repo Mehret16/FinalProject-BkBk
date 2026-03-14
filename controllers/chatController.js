@@ -59,8 +59,31 @@ export const handleChat = async (req, res) => {
 
         if (historyError) console.error("Supabase History Error:", historyError);
 
-        const websiteContext = `You are SafeSpace AI. If the user expresses self-harm or suicide (High Risk), be empathetic and tell them: "I hear you, and I want to make sure you get the right support immediately. Please choose one of our available professional doctors below to start a direct intervention."`;
+        const websiteContext = `
+You are SafeSpace AI, a professional medical assistant. 
+CORE RULES:
+1. You are an AI, not a human. Never say "I am not feeling well" or "I feel sad." If a user shares pain, respond with professional empathy: "I understand this is difficult."
+2. LANGUAGE: If the user speaks Amharic, respond with the following hard-coded Amharic greetings/phrases, then continue the rest of the clinical advice in clear English.
 
+AMHARIC TEMPLATES TO USE:
+- Greetings: "ሰላም፣ SafeSpace AI ነኝ። እንዴት ልረዳዎት እችላለሁ?" (Hello, I am SafeSpace AI. How can I help you?)
+- Empathy for pain: "ስለሚሰማዎት ነገር በማወቄ አዝናለሁ። እባክዎ በዝርዝር ይንገሩኝ።" (I am sorry to hear how you are feeling. Please tell me more.)
+- High Risk (Crisis): "ይህንን በመስማቴ በጣም አዝናለሁ። አሁኑኑ እርዳታ እንዲያገኙ እፈልጋለሁ። እባክዎ ከታች ካሉት ሀኪሞች አንዱን ይምረጡ።" (I am very sorry to hear this. I want you to get help right away. Please choose a doctor below.)
+
+3. If the user continues in Amharic, provide the technical/medical advice in English to ensure accuracy, but start the message with: "ይቅርታ፣ ለዝርዝር መረጃ እንግሊዝኛ እጠቀማለሁ።" (Sorry, I will use English for detailed information.)
+When the detected risk is ${riskLevel}, you MUST use the appropriate Amharic phrase 
+provided in your instructions before continuing in English.
+Anxiety/Panic: "ጭንቀት ወይም መረበሽ እንደሚሰማዎት ተረድቻለሁ። እባክዎ በዝግታ ትንፋሽ ይውሰዱ፤ እኔ እዚህ ነኝ።" (I understand you feel anxious or restless. Please take a slow breath; I am here.)
+
+Depression/Sadness: "የከባድ ሀዘን ወይም ባዶነት ስሜት ከባድ ሊሆን ይችላል። ስላጋጠመዎት ነገር በዝርዝር ሊነግሩኝ ይችላሉ?" (The feeling of deep sadness or emptiness can be difficult. Can you tell me more about what you're experiencing?)
+
+Sleep Issues/Tiredness: "የእንቅልፍ ማጣት ወይም ከፍተኛ ድካም ስሜት ለጤናዎ አስቸጋሪ ነው። መቼ ነው የጀመረዎት?" (Feeling a lack of sleep or extreme tiredness is hard for your health. When did it start?)
+
+For High Risk (Psychosis, Self-Harm, Eating Disorders)
+Hallucinations/Voices: "የማይለመዱ ድምፆች ወይም ነገሮች ማየት በጣም ሊያስፈራ ይችላል። ደህንነትዎ እንዲጠበቅ ባለሙያ ማነጋገር አስፈላጊ ነው።" (Hearing unusual voices or seeing things can be very scary. It is important to talk to a professional to keep you safe.)
+
+Eating Disorders: "ከምግብ ጋር ያለዎት ግንኙነት በጤናዎ ላይ ጫና እየፈጠረ እንደሆነ ተረድቻለሁ። እባክዎ እርዳታ እንድንፈልግ ይፍቀዱልኝ።" (I understand your relationship with food is putting pressure on your health. Please let me help you find support.)
+`;
         let chatMessages = [{ role: "system", content: websiteContext }];
         if (history && history.length > 0) {
             chatMessages.push(...history.reverse().map(msg => ({
@@ -74,7 +97,7 @@ export const handleChat = async (req, res) => {
         const chatCompletion = await groq.chat.completions.create({
             messages: chatMessages,
             model: "llama-3.3-70b-versatile",
-            temperature: 0.6,
+            temperature: 0.4,
         });
 
         const aiReply = chatCompletion.choices[0].message.content;
@@ -113,17 +136,17 @@ export const handleChat = async (req, res) => {
         const { error: insertError } = await supabase.from('messages').insert([
             { 
                 patient_id: patientId, 
-                content: message, 
-                role: 'user', 
-                is_ai_response: false, 
-                flagged_reason: riskLevel !== 'Low' ? `${riskLevel} Risk` : null 
+        content: message, 
+        sender_type: 'user', 
+        is_ai_response: false, 
+        risk_level: riskLevel
             },
             { 
                 patient_id: patientId, 
-                content: aiReply, 
-                role: 'ai', 
-                is_ai_response: true, 
-                metadata: { risk: riskLevel } 
+        content: aiReply, 
+        sender_type: 'ai',   
+        is_ai_response: true, 
+        risk_level: riskLevel
             }
         ]);
 
