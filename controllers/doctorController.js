@@ -11,13 +11,11 @@ const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.en
 export const getAllDoctors = async (req, res) => {
     try {
         const supabase = getSupabase();
-        
         const { data, error } = await supabase
             .from('doctors')
-            .select('id, name, speciality, is_online, avatar, email');
+            .select('id, first_name, last_name, specialization, is_online, email'); // Fixed column names
 
         if (error) throw error;
-
         res.status(200).json(data || []);
     } catch (error) {
         console.error('❌ Error in getAllDoctors:', error.message);

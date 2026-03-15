@@ -59,7 +59,7 @@ export const handleChat = async (req, res) => {
             
             await supabaseAdmin
                 .from('patients')
-                .update({ risk_level: 'high', status: 'High Risk' })
+                .update({ risk_level: 'high', status: 'High' })
                 .eq('id', patientId);
         }
 
@@ -77,10 +77,22 @@ export const handleChat = async (req, res) => {
         const aiReply = chatCompletion.choices[0].message.content;
 
         // --- 4. PERSISTENCE ---
-        await supabase.from('messages').insert([
-            { patient_id: patientId, content: message, sender_type: 'patient' },
-            { patient_id: patientId, content: aiReply, sender_type: 'ai' }
-        ]);
+   await supabase.from('messages').insert([
+    { 
+        patient_id: patientId, 
+        content: message, 
+        sender_type: 'patient', 
+        is_ai_response: false, 
+        is_read: false 
+    },
+    { 
+        patient_id: patientId, 
+        content: aiReply, 
+        sender_type: 'ai', 
+        is_ai_response: true, 
+        is_read: false 
+    }
+]);
 
         return res.status(200).json({ risk: riskLevel, reply: aiReply, doctors: availableDoctors });
     } catch (err) {
