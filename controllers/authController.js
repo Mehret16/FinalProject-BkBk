@@ -55,12 +55,14 @@ const handleSignup = async (req, res, assignedRole) => {
         }
 
         if (dbError) {
+            // Rollback Auth user if DB profile creation fails
             await supabaseAdmin.auth.admin.deleteUser(data.user.id);
             return res.status(500).json({ error: dbError.message });
         }
 
         res.status(200).json({ message: "Signup successful", user: data.user });
     } catch (err) {
+        console.error("Signup Error:", err);
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
@@ -87,4 +89,17 @@ export const login = async (req, res) => {
         role: userRole,
         user: { id: data.user.id, email: data.user.email }
     });
+};
+
+// --- THIS WAS THE MISSING EXPORT CAUSING THE DEPLOY ERROR ---
+export const logout = async (req, res) => {
+    try {
+        const supabase = getSupabase();
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        res.status(200).json({ message: "Logged out successfully" });
+    } catch (err) {
+        console.error("Logout Error:", err);
+        res.status(500).json({ error: "Logout failed" });
+    }
 };

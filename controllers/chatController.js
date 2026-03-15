@@ -101,7 +101,7 @@ export const notifySelectedDoctor = async (req, res) => {
             from: process.env.EMAIL_USER,
             to: doctor.email,
             subject: '🚨 EMERGENCY: High-Risk Intervention Requested',
-            // Update the HTML line in notifySelectedDoctor
+            
             html: `<p>Hello ${doctor.first_name} ${doctor.last_name}, a patient needs help.</p><p>Context: ${messageContent}</p>`
         });
         
