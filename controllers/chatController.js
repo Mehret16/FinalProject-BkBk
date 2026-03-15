@@ -15,6 +15,9 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+/**
+ * HANDLE CHAT
+ */
 export const handleChat = async (req, res) => {
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
     const groq = new Groq({ 
@@ -81,10 +84,14 @@ export const handleChat = async (req, res) => {
 
         return res.status(200).json({ risk: riskLevel, reply: aiReply, doctors: availableDoctors });
     } catch (err) {
+        console.error("Chat Error:", err);
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
 
+/**
+ * NOTIFY SELECTED DOCTOR
+ */
 export const notifySelectedDoctor = async (req, res) => {
     try {
         const { doctorId, messageContent } = req.body;
@@ -101,12 +108,33 @@ export const notifySelectedDoctor = async (req, res) => {
             from: process.env.EMAIL_USER,
             to: doctor.email,
             subject: '🚨 EMERGENCY: High-Risk Intervention Requested',
-            
             html: `<p>Hello ${doctor.first_name} ${doctor.last_name}, a patient needs help.</p><p>Context: ${messageContent}</p>`
         });
         
         return res.status(200).json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+}; // <--- Fixed: Added missing closing brace here
+
+/**
+ * GET CHAT HISTORY
+ */
+export const getChatHistory = async (req, res) => {
+    try {
+        const supabase = getSupabase();
+        const patientId = req.params.patientId || req.user.id;
+
+        const { data, error } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('patient_id', patientId)
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        res.status(200).json(data);
+    } catch (err) {
+        console.error("Error fetching chat history:", err.message);
+        res.status(500).json({ error: "Failed to fetch chat history" });
     }
 };
