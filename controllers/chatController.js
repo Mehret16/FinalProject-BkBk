@@ -102,7 +102,8 @@ export const notifySelectedDoctor = async (req, res) => {
             to: doctor.email,
             subject: '🚨 EMERGENCY: High-Risk Intervention Requested',
             // Update the HTML line in notifySelectedDoctor
-html: `<p>Hello ${doctor.name}, a patient needs help.</p><p>Context: ${messageContent}</p>`        });
+            html: `<p>Hello ${doctor.first_name} ${doctor.last_name}, a patient needs help.</p><p>Context: ${messageContent}</p>`
+        });
         
         return res.status(200).json({ success: true });
     } catch (err) {
