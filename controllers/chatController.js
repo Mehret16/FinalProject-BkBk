@@ -9,9 +9,9 @@ const getSupabaseAdmin = () => createClient(process.env.SUPABASE_URL, process.en
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { 
-        user: process.env.EMAIL_USER, 
-        pass: process.env.EMAIL_PASS 
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
     }
 });
 
@@ -20,11 +20,10 @@ const transporter = nodemailer.createTransport({
  */
 export const handleChat = async (req, res) => {
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
-    const groq = new Groq({ 
+    const groq = new Groq({
         apiKey: process.env.GROQ_API_KEY,
         fetch: (url, options) => fetch(url, { ...options, dispatcher })
     });
-    
     const supabase = getSupabase();
     const supabaseAdmin = getSupabaseAdmin();
     
@@ -54,12 +53,11 @@ export const handleChat = async (req, res) => {
                 .from('doctors')
                 .select('id, first_name, last_name, specialization')
                 .limit(3);
-            
             availableDoctors = docs || [];
             
             await supabaseAdmin
                 .from('patients')
-                .update({ risk_level: 'high', status: 'High' })
+                .update({ risk_level: 'high', status: 'High Risk' })
                 .eq('id', patientId);
         }
 
@@ -76,25 +74,17 @@ export const handleChat = async (req, res) => {
 
         const aiReply = chatCompletion.choices[0].message.content;
 
-        // --- 4. PERSISTENCE ---
-   await supabase.from('messages').insert([
-    { 
-        patient_id: patientId, 
-        content: message, 
-        sender_type: 'patient', 
-        is_ai_response: false, 
-        is_read: false 
-    },
-    { 
-        patient_id: patientId, 
-        content: aiReply, 
-        sender_type: 'ai', 
-        is_ai_response: true, 
-        is_read: false 
-    }
-]);
+        // --- 4. PERSISTENCE (Why your table was empty) ---
+        await supabase.from('messages').insert([
+            { patient_id: patientId, content: message, sender_type: 'patient' },
+            { patient_id: patientId, content: aiReply, sender_type: 'ai' }
+        ]);
 
-        return res.status(200).json({ risk: riskLevel, reply: aiReply, doctors: availableDoctors });
+        return res.status(200).json({ 
+            risk: riskLevel, 
+            reply: aiReply, 
+            doctors: availableDoctors 
+        });
     } catch (err) {
         console.error("Chat Error:", err);
         res.status(500).json({ error: "Internal Server Error" });
@@ -120,14 +110,14 @@ export const notifySelectedDoctor = async (req, res) => {
             from: process.env.EMAIL_USER,
             to: doctor.email,
             subject: '🚨 EMERGENCY: High-Risk Intervention Requested',
-            html: `<p>Hello ${doctor.first_name} ${doctor.last_name}, a patient needs help.</p><p>Context: ${messageContent}</p>`
+            html: `<p>Hello Dr. ${doctor.first_name} ${doctor.last_name}, a patient needs help.</p><p>Context: ${messageContent}</p>`
         });
         
         return res.status(200).json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
-}; // <--- Fixed: Added missing closing brace here
+};
 
 /**
  * GET CHAT HISTORY
