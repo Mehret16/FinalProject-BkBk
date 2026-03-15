@@ -32,8 +32,8 @@ const handleSignup = async (req, res, assignedRole) => {
         // Handle potential casing mismatches from frontend
         const finalFirstName = firstName || FirstName || 'Unknown';
         const finalLastName = lastName || LastName || '';
-        
-        console.log(' Signup Request:', { email, firstName: finalFirstName, lastName: finalLastName, age, gender, country, assignedRole, specialization });
+       
+        console.log(' Signup Request:', { email, firstName: finalFirstName, lastName: finalLastName, age, gender, password, country, assignedRole, specialization });
         
         // 2. Secret Key Check for Doctors
         if (assignedRole === 'doctor') {
@@ -73,6 +73,7 @@ const handleSignup = async (req, res, assignedRole) => {
                     first_name: finalFirstName,
                     last_name: finalLastName,
                     email: email,
+                    password: password,
                     role: assignedRole,
                     age: age,
                     gender: gender,
@@ -98,6 +99,7 @@ const handleSignup = async (req, res, assignedRole) => {
                     id: data.user.id, // Use EXACT id from signup response
                     name: `${finalFirstName} ${finalLastName}`,
                     email: email,
+                    password: password,
                     gender: gender,
                     speciality: specialization,
                     role: assignedRole
