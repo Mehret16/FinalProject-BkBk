@@ -27,13 +27,13 @@ const handleSignup = async (req, res, assignedRole) => {
     const supabase = getSupabase();
     const supabaseAdmin = getSupabaseAdmin();
     try {
-        const { email, password, firstName, FirstName, lastName, LastName, age, gender, country, adminKey, specialization } = req.body;
+        const { email, firstName, FirstName, lastName, LastName, age, gender, country, adminKey, specialization } = req.body;
         
         // Handle potential casing mismatches from frontend
         const finalFirstName = firstName || FirstName || 'Unknown';
         const finalLastName = lastName || LastName || '';
        
-        console.log(' Signup Request:', { email, firstName: finalFirstName, lastName: finalLastName, age, gender, password, country, assignedRole, specialization });
+        console.log(' Signup Request:', { email, firstName: finalFirstName, lastName: finalLastName, age, gender, country, assignedRole, specialization });
         
         // 2. Secret Key Check for Doctors
         if (assignedRole === 'doctor') {
@@ -48,7 +48,6 @@ const handleSignup = async (req, res, assignedRole) => {
         //  Supabase hashes the password automatically. No bcrypt needed.
         const { data, error } = await supabase.auth.signUp({
             email,
-            password,
             options: {
                 data: { 
                     first_name: finalFirstName, 
@@ -73,7 +72,6 @@ const handleSignup = async (req, res, assignedRole) => {
                     first_name: finalFirstName,
                     last_name: finalLastName,
                     email: email,
-                    password: password,
                     role: assignedRole,
                     age: age,
                     gender: gender,
@@ -97,7 +95,7 @@ const handleSignup = async (req, res, assignedRole) => {
             } else if (assignedRole === 'doctor') {
                 const doctorData = {
                     id: data.user.id, // Use EXACT id from signup response
-                    name: `${finalFirstName} ${finalLastName}`,
+                    first_name: `${finalFirstName} ${finalLastName}`,
                     email: email,
                     password: password,
                     gender: gender,
