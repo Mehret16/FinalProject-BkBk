@@ -111,6 +111,9 @@ export const notifySelectedDoctor = async (req, res) => {
     try {
         const { doctorId, messageContent } = req.body;
         const supabase = getSupabase();
+        const supabaseAdmin = getSupabaseAdmin();
+        const patientId = req.user.id;
+        
         const { data: doctor } = await supabase
             .from('doctors')
             .select('first_name, last_name, email')
@@ -125,6 +128,46 @@ export const notifySelectedDoctor = async (req, res) => {
             subject: '🚨 EMERGENCY: High-Risk Intervention Requested',
             html: `<p>Hello Dr. ${doctor.first_name} ${doctor.last_name}, a patient needs help.</p><p>Context: ${messageContent}</p>`
         });
+        
+        // Track the intervention request in database
+        const { data: latestMessage } = await supabaseAdmin
+            .from('messages')
+            .select('id')
+            .eq('patient_id', patientId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+            
+        if (latestMessage) {
+            await supabaseAdmin
+                .from('messages')
+                .update({ 
+                    doctor_id: doctorId,
+                    is_accepted_by_doctor: false 
+                })
+                .eq('id', latestMessage.id);
+        }
+        
+        return res.status(200).json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * ACCEPT INTERVENTION
+ */
+export const acceptIntervention = async (req, res) => {
+    try {
+        const { messageId } = req.body;
+        const supabaseAdmin = getSupabaseAdmin();
+        
+        const { error } = await supabaseAdmin
+            .from('messages')
+            .update({ is_accepted_by_doctor: true })
+            .eq('id', messageId);
+            
+        if (error) throw error;
         
         return res.status(200).json({ success: true });
     } catch (err) {
