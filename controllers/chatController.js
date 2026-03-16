@@ -52,13 +52,28 @@ export const handleChat = async (req, res) => {
         // --- 2. DOCTOR FETCHING ---
         let availableDoctors = [];
         if (riskLevel === 'high') {
-            const { data: docs } = await supabase
+            // First try to get online doctors
+            const { data: docs } = await supabaseAdmin
                 .from('doctors')
                 .select('id, first_name, last_name, specialization')
                 .eq('is_online', true)
                 .limit(3);
+            
+            console.log("Emergency Fetch Result:", docs);
             availableDoctors = docs || [];
-        } // <--- FIXED HERE: Added missing closing brace
+            
+            // Fallback: If no online doctors, get any 3 doctors
+            if (availableDoctors.length === 0) {
+                console.log("No online doctors found, fetching any available doctors");
+                const { data: fallbackDocs } = await supabaseAdmin
+                    .from('doctors')
+                    .select('id, first_name, last_name, specialization')
+                    .limit(3);
+                
+                console.log("Fallback Fetch Result:", fallbackDocs);
+                availableDoctors = fallbackDocs || [];
+            }
+        } 
 
         // --- 3. AI RESPONSE ---
         const systemPrompt = `You are SafeSpace AI. Current Risk: ${riskLevel}. Respond in English unless user uses Amharic.`;
