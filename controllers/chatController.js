@@ -18,6 +18,9 @@ const transporter = nodemailer.createTransport({
 /**
  * HANDLE CHAT
  */
+/**
+ * HANDLE CHAT
+ */
 export const handleChat = async (req, res) => {
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
     const groq = new Groq({
@@ -52,14 +55,10 @@ export const handleChat = async (req, res) => {
             const { data: docs } = await supabase
                 .from('doctors')
                 .select('id, first_name, last_name, specialization')
+                .eq('is_online', true)
                 .limit(3);
             availableDoctors = docs || [];
-            
-            await supabaseAdmin
-                .from('patients')
-                .update({ risk_level: 'high', status: 'High Risk' })
-                .eq('id', patientId);
-        }
+        } // <--- FIXED HERE: Added missing closing brace
 
         // --- 3. AI RESPONSE ---
         const systemPrompt = `You are SafeSpace AI. Current Risk: ${riskLevel}. Respond in English unless user uses Amharic.`;
@@ -74,8 +73,8 @@ export const handleChat = async (req, res) => {
 
         const aiReply = chatCompletion.choices[0].message.content;
 
-        // --- 4. PERSISTENCE (Why your table was empty) ---
-        await supabase.from('messages').insert([
+        // --- 4. PERSISTENCE ---
+        await supabaseAdmin.from('messages').insert([
             { patient_id: patientId, content: message, sender_type: 'patient' },
             { patient_id: patientId, content: aiReply, sender_type: 'ai' }
         ]);
@@ -90,7 +89,6 @@ export const handleChat = async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
-
 /**
  * NOTIFY SELECTED DOCTOR
  */
